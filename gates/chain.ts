@@ -35,6 +35,37 @@ export type Phase =
   | "hafıza:remember"
   | "BITTI";
 
+/**
+ * Zincirin ÖBÜR YÜZÜ: bir faza girebilmek için hangi fazların gerçekleşmiş
+ * olması gerekir.
+ *
+ * `TRANSITIONS` tek bir koşunun adım adım gidişini modeller ve orkestratör
+ * için doğrudur. Ama defterden geçmişi okumak için yetmez: `measure.sh` birkaç
+ * kapıyı TOPLU ölçer, kapılar yeniden koşturulur, iş yineler. Komşuluğa bakan
+ * bir okuma bunların hepsini "atlama" sayar — F4-1'de 67 kez saydı, oysa
+ * çoğu meşruydu (ölçüldü 22 Eyl 2026).
+ *
+ * Önkoşul ise sıralamadan bağımsızdır ve asıl güvenceyi söyler: "blast kapısı
+ * ölçüldüyse ortada bir plan VARDI", "postbuild ölçüldüyse build KOŞTU".
+ * İhlali gerçekten bir şey ifade eder — kapı, okuması gereken kararı
+ * okuyamadan ölçmüştür.
+ */
+export const REQUIRES: Partial<Record<Phase, Phase[]>> = {
+  "gate:spec": ["spec"],
+  "gate:scope": ["spec"],
+  plan: ["gate:spec", "gate:scope"],
+  "gate:blast": ["plan"],
+  build: ["plan", "gate:blast"],
+  "gate:postbuild": ["build"],
+  review: ["build"],
+  "gate:review": ["review"],
+  merge: ["gate:review"],
+  test: ["build"],
+  uat: ["test", "gate:review"],
+  "gate:teslim": ["uat"],
+  "hafıza:remember": ["gate:teslim"],
+};
+
 /** Bir fazdan geçilebilecek fazlar. "BITTI" = hattın meşru sonu. */
 export const TRANSITIONS: Record<Phase, Phase[]> = {
   "hafıza": ["ölçüm"],
@@ -45,8 +76,14 @@ export const TRANSITIONS: Record<Phase, Phase[]> = {
   // ve zaman harcar. Tabloda yazılı olmasının sebebi, yazılı olmayan her
   // geçişin bir gün "acaba kasıtlı mıydı" sorusuna dönüşmesi.
   "spec": ["gate:spec", "gate:scope", "BITTI"],
-  "gate:spec": ["gate:scope", "BITTI"],
-  "gate:scope": ["plan", "BITTI"],
+  // ONARIM DÖNGÜLERİ. Tabloda yalnızca ileri geçişler vardı; gerçek iş ise
+  // yineler — kapı reddeder, belge yeniden yazılır, yeniden ölçülür. Bu
+  // kenarlar yazılı olmadığı için tablo GERÇEK AKIŞI MODELLEMİYORDU ve tam bu
+  // yüzden hiçbir komut ona bakamıyordu: baksaydı normal işi durdururdu
+  // (ölçüldü 22 Eyl 2026 — F4-1'in defterinde 67 "kaçak" geçişin çoğu aslında
+  // meşru onarımdı).
+  "gate:spec": ["gate:scope", "spec", "BITTI"],
+  "gate:scope": ["plan", "spec", "BITTI"],
   // specOnly burada durur; plan üretildi, kod yazılmadı.
   //
   // "plan → build" de meşru: plan zaten varsa blast kapısı YENİDEN ÖLÇÜLMEZ,
@@ -54,15 +91,20 @@ export const TRANSITIONS: Record<Phase, Phase[]> = {
   // (kritik yüzey → insan) her durumda koşar. Faz işareti yalnızca kapı
   // gerçekten ölçüldüğünde basılır; tablo "girilen fazları" modeller.
   "plan": ["gate:blast", "build", "BITTI"],
-  "gate:blast": ["build", "BITTI"],
+  "gate:blast": ["build", "plan", "BITTI"],
   "build": ["gate:postbuild"],
-  "gate:postbuild": ["review", "BITTI"],
+  // Plana uymuyorsa yeniden build; plan yanlışsa plana dön.
+  "gate:postbuild": ["review", "build", "plan", "BITTI"],
   "review": ["gate:review"],
-  "gate:review": ["merge", "BITTI"],
-  "merge": ["test", "BITTI"],
-  "test": ["uat", "BITTI"],
+  // Bulgu varsa düzeltme build'e döner — review'ın tek çıkışı merge değildir.
+  "gate:review": ["merge", "build", "BITTI"],
+  // Birleşmiş hâlde kırmızıysa düzeltme yine build'dedir.
+  "merge": ["test", "build", "BITTI"],
+  "test": ["uat", "build", "BITTI"],
   "uat": ["gate:teslim"],
-  "gate:teslim": ["hafıza:remember"],
+  // Teslim kapısı engel gösterirse iş biter değil, geri döner: engel koda
+  // aitse build'e, belgeye aitse uat'a.
+  "gate:teslim": ["hafıza:remember", "build", "uat"],
   // Teslim kapısı kırmızı olsa bile hafıza yazılır: ne öğrendiğimiz, işin
   // geçip geçmemesinden bağımsızdır. Durdurucu değil, kayıt.
   "hafıza:remember": ["BITTI"],

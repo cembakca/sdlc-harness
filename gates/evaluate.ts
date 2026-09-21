@@ -17,6 +17,8 @@ import { GATES, type GateName } from "./questions.ts";
 import { ask, isOffline } from "./jev.ts";
 import { record, ticketOf } from "./journal.ts";
 import { fromRoot, harnessRoot } from "./root.ts";
+import { requireEntry } from "./flow.ts";
+import type { Phase } from "./chain.ts";
 import { resolve } from "node:path";
 
 /** Harness'a ait dosya: proje kokunde DEGIL harness kokunde aranir. */
@@ -69,6 +71,15 @@ if (gate.wantsProjectContext) {
 // Dogrulama kapinin KENDI karar fonksiyonuyla yapilir: iki olcumun nokta
 // tahminleri degil, KARARLARI karsilastirilir. Ihtiyat sirasi: pass < human < block.
 const RANK: Record<string, number> = { pass: 0, human: 1, block: 2 };
+// ZINCIR BURADA ZORLANIR. Daha once `chain.ts` yaziliydi ama gercek hicbir
+// komut ona bakmiyordu; F4-1'in defterinde teslim kapisi UAT kaniti yokken
+// 37 kez olctu (olculdu 22 Eyl 2026). Bir kapi, okumasi gereken karari
+// okuyamadan olcerse olctugu sey eksik bir durumdur.
+const GATE_PHASE: Record<string, Phase> = {
+  spec: "gate:spec", scope: "gate:scope", blast: "gate:blast", review: "gate:review",
+};
+if (GATE_PHASE[gate.name]) requireEntry(ticketOf(artifactPath), GATE_PHASE[gate.name]);
+
 const { answers, usage, model, cached, unstable } = await ask(
   `# ${gate.stateHint}\n\n${state}`,
   gate.questions,

@@ -69,6 +69,42 @@ hiçbir yolu eşleştirmeyen `changedPattern`, var olmayan yığın dizini, watc
 modunda açılan test komutu, derlenmeyen düzenli ifade, hafızaya verilmiş bir
 sır yolu. Bozuk JSON artık varsayılanlara düşmez — sesli düşer.
 
+## Akış: zincir kâğıtta mı, kapıda mı
+
+Zincir (`gates/chain.ts`) yazılıydı ama **gerçek hiçbir komut ona bakmıyordu** —
+yalnızca kuru koşum, hiç koşmamış orkestratör ve selftest okuyordu. Sonuç,
+pilot projenin kendi defterinde görülebiliyor (ölçüldü 22 Eyl 2026):
+
+- teslim kapısı **37 kez**, defterde UAT kanıtı yokken ölçtü
+- blast kapısı planı, scope kararı verilmeden önce ölçtü
+
+`gates/status.ts` bunu göremezdi: o bir **kontrol listesi**, hangi kapının
+satırı var diye bakar — satırların dayanağına değil.
+
+```bash
+make sdlc-flow TICKET=X   # neredeyim, sırada ne var, dayanaksız ölçüm oldu mu
+make sdlc-next TICKET=X   # yalnızca bir sonraki komut
+```
+
+**Ölçülen şey sıra değil, dayanaktır.** `measure.sh` birkaç kapıyı toplu ölçer,
+kapılar yeniden koşturulur, iş yineler — komşuluğa bakan bir okuma bunların
+hepsini "atlama" sayardı. Önkoşul ise sıralamadan bağımsızdır ve asıl
+güvenceyi söyler: *blast ölçüldüyse ortada bir plan vardı, postbuild ölçüldüyse
+build koştu.*
+
+Dayanak geçişlidir: `plan.md`'nin diskte durması plan sayılmaz — spec ve scope
+kapılarından geçmemişse ortada yalnızca bir dosya vardır.
+
+Kapılar ölçmeden önce bunu sorar ve dayanak yoksa **durur** (exit 21). Geçmenin
+tek yolu gerekçeyi deftere yazmaktır:
+
+```bash
+SDLC_FLOW_OVERRIDE="<neden>" node gates/evaluate.ts blast docs/sdlc/X/plan.md
+```
+
+Bu bir bypass değil, imzalı bir istisnadır: `flow:override` satırı defterin
+mühür zincirine girer ve `make sdlc-history` onu gösterir.
+
 ## CI istisna politikası
 
 Bilet belgesi (`docs/sdlc/<TICKET>/`) olmayan bir değişiklikte **commit

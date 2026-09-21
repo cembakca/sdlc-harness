@@ -872,6 +872,47 @@ else
   printf '%s\n' "$SMOKE_OUT" | grep -E '✗' | head -6 | sed 's/^/    /'
 fi
 
+# --- Zincir KAGITTA MI, kapida mi ---------------------------------------
+# chain.ts yaziliydi ama gercek hicbir komut ona bakmiyordu: yalnizca kuru
+# kosum, HIC KOSMAMIS orkestrator ve selftest okuyordu. Sonuc F4-1'in kendi
+# defterinde: teslim kapisi UAT kaniti yokken 37 kez olctu, blast kapisi plani
+# scope karari verilmeden once olctu (olculdu 22 Eyl 2026).
+FD="$(mktemp -d)/proje"; mkdir -p "$FD/sdlc" "$FD/docs/sdlc/FL-1"
+printf '{"schemaVersion":1,"name":"p","stacks":[]}' > "$FD/sdlc/project.json"
+echo "# plan" > "$FD/docs/sdlc/FL-1/plan.md"
+# Bos bir bilete plan.md birakip dogrudan blast kapisina girmek DURMALI:
+# plan.md'nin diskte durmasi, spec ve scope kapilarindan gectigi anlamina gelmez.
+env -u SDLC_PROJECT_ROOT -u SDLC_FLOW_OVERRIDE SDLC_PROJECT_ROOT="$FD" \
+  node "$HARNESS/gates/evaluate.ts" blast "$FD/docs/sdlc/FL-1/plan.md" >/dev/null 2>&1
+if [ "$?" = "21" ]; then
+  printf '  ✓ %s\n' "dayanaksız kapı durduruluyor (zincir kâğıtta değil)"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "dayanağı olmayan kapı ölçüyor — zincir yine kâğıtta"; FAIL=$((FAIL+1))
+fi
+# Istisna BYPASS degil, KAYITTIR: gecerse deftere flow:override satiri duser.
+env -u SDLC_PROJECT_ROOT SDLC_PROJECT_ROOT="$FD" SDLC_FLOW_OVERRIDE="selftest" \
+  node "$HARNESS/gates/evaluate.ts" blast "$FD/docs/sdlc/FL-1/plan.md" >/dev/null 2>&1
+if grep -q '"gate":"flow:override"' "$FD/docs/sdlc/FL-1/decisions.jsonl" 2>/dev/null; then
+  printf '  ✓ %s\n' "akış istisnası deftere yazılıyor (bayrak değil, kayıt)"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "akış istisnası kayıtsız geçiyor — sessiz bypass"; FAIL=$((FAIL+1))
+fi
+# Onkosul tablosu zincirle tutarli olmali: her onkosul bilinen bir faz olmali.
+if env -u SDLC_PROJECT_ROOT node -e '
+  const c = await import(process.argv[1] + "/gates/chain.ts");
+  const bad = [];
+  for (const [ph, reqs] of Object.entries(c.REQUIRES)) {
+    if (!(ph in c.TRANSITIONS)) bad.push(`bilinmeyen faz: ${ph}`);
+    for (const r of reqs) if (!(r in c.TRANSITIONS)) bad.push(`${ph} -> bilinmeyen: ${r}`);
+  }
+  if (bad.length) { console.error(bad.join(" · ")); process.exit(1); }
+' "$HARNESS" 2>/dev/null; then
+  printf '  ✓ %s\n' "önkoşul tablosu zincirle tutarlı"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "önkoşul tablosunda bilinmeyen faz var"; FAIL=$((FAIL+1))
+fi
+rm -rf "$FD"
+
 # --- IKI KOK KARISMASIN --------------------------------------------------
 # Harness dosyasini PROJE kokunde aramak, ayni repoda calisirken gorunmez bir
 # hatadir: iki kok ayni dizindir. Submodule duzeninde ise her komut kirilir —

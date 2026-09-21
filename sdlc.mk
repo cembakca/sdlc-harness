@@ -24,6 +24,12 @@ SDLC_PROJECT_DATASET ?= project
 sdlc-new: ## Yeni ticket: klasor + intent + DAL: make sdlc-new TICKET=HKA-123 TITLE="..."
 	@$(SDLC)scripts/sdlc/new.sh $(TICKET) "$(TITLE)"
 
+sdlc-flow: ## Bu bilet zincirin neresinde, sirada ne var: make sdlc-flow TICKET=X
+	@node $(SDLC)gates/flow.ts $(TICKET)
+
+sdlc-next: ## Yalnizca bir sonraki komut: make sdlc-next TICKET=X
+	@node $(SDLC)gates/flow.ts $(TICKET) --next
+
 sdlc-status: ## Her ticket nerede duruyor
 	@node $(SDLC)gates/status.ts
 
@@ -215,4 +221,4 @@ sdlc-memory-verify: ## Hafiza GERCEKTEN calisiyor mu (yaz -> graf -> geri oku)
 
 # ---------------------------------------------------------------- SDLC son
 
-.PHONY: sdlc-cache sdlc-config sdlc-calibrate-plan cognee-agents cognee-ask cognee-bootstrap cognee-cloud cognee-down cognee-full cognee-graph cognee-ingest cognee-local cognee-logs cognee-project cognee-rebuild cognee-reset cognee-skills cognee-up sdlc sdlc-approve sdlc-assign sdlc-calibrate sdlc-chain sdlc-check sdlc-commits sdlc-defer sdlc-diagnose sdlc-doctor sdlc-dryrun sdlc-gate sdlc-github sdlc-hindsight sdlc-history sdlc-init sdlc-land sdlc-memory sdlc-memory-quality sdlc-memory-verify sdlc-merge-check sdlc-new sdlc-orchestrate sdlc-outcome sdlc-postbuild sdlc-ready sdlc-run sdlc-secrets sdlc-selftest sdlc-status sdlc-test 
+.PHONY: sdlc-flow sdlc-next sdlc-cache sdlc-config sdlc-calibrate-plan cognee-agents cognee-ask cognee-bootstrap cognee-cloud cognee-down cognee-full cognee-graph cognee-ingest cognee-local cognee-logs cognee-project cognee-rebuild cognee-reset cognee-skills cognee-up sdlc sdlc-approve sdlc-assign sdlc-calibrate sdlc-chain sdlc-check sdlc-commits sdlc-defer sdlc-diagnose sdlc-doctor sdlc-dryrun sdlc-gate sdlc-github sdlc-hindsight sdlc-history sdlc-init sdlc-land sdlc-memory sdlc-memory-quality sdlc-memory-verify sdlc-merge-check sdlc-new sdlc-orchestrate sdlc-outcome sdlc-postbuild sdlc-ready sdlc-run sdlc-secrets sdlc-selftest sdlc-status sdlc-test 
