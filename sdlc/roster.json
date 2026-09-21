@@ -1,0 +1,248 @@
+{
+  "$comment": "AI ekibinin kadrosu. Kim hangi rolu, hangi saglayicida, hangi modelle yapiyor. TEK KAYNAK — model adi baska hicbir dosyada elle yazilmaz. Her rolun uc kademesi var: isin sinifini gates/route.ts olcer, model ve efor oradan secilir. Sapmayi `node sdlc/roster.ts --check` yakalar.",
+  "vendors": {
+    "anthropic": {
+      "label": "Claude",
+      "surface": "Claude Code (bu oturum ve subagent'lar)"
+    },
+    "openai": {
+      "label": "Codex",
+      "surface": "codex CLI 0.154.0, ChatGPT aboneliği"
+    },
+    "typesafe": {
+      "label": "Jev",
+      "surface": "api.typesafe.ai /v1/systemone"
+    },
+    "none": {
+      "label": "—",
+      "surface": "kod, model yok"
+    }
+  },
+  "roles": {
+    "harness": {
+      "title": "Şef / orkestratör",
+      "vendor": "none",
+      "model": null,
+      "where": ".claude/workflows/sdlc.js",
+      "why": "Sıra, dallanma ve durma koşulu kodda. Koordinasyon bir model konuşması olmadığı için token maliyeti sıfır."
+    },
+    "analyst": {
+      "title": "BRD analisti (intent → spec)",
+      "vendor": "anthropic",
+      "model": "opus",
+      "where": ".claude/skills/brd-analyst",
+      "why": "Pipeline'ın %70'i burada. En güçlü akıl yürütme modeli, en uzun context. Ucuzlatılacak yer burası değil.",
+      "tiers": {
+        "mechanical": {
+          "model": "sonnet"
+        },
+        "standard": {
+          "model": "opus"
+        },
+        "deep": {
+          "model": "opus"
+        }
+      },
+      "inChain": true
+    },
+    "architect": {
+      "title": "Mimar (spec → plan)",
+      "vendor": "anthropic",
+      "model": "opus",
+      "where": ".claude/skills/architect",
+      "why": "Repo'yu gerçekten okuyup dosya yollarını doğrulaması gerekiyor; hata burada yapılırsa build fazı yanlış yeri kazar.",
+      "tiers": {
+        "mechanical": {
+          "model": "sonnet"
+        },
+        "standard": {
+          "model": "opus"
+        },
+        "deep": {
+          "model": "opus"
+        }
+      },
+      "inChain": true
+    },
+    "implementer": {
+      "title": "Geliştirici (plan → diff)",
+      "vendor": "openai",
+      "model": "gpt-5.6-sol",
+      "effort": "medium",
+      "where": "scripts/sdlc/codex-build.sh → codex exec --sandbox workspace-write",
+      "why": "Planı yazan taraf kodu yazmasın. Farklı sağlayıcı, korelasyonsuz hata modu. İzole worktree'de çalışır, land etmez.",
+      "tiers": {
+        "mechanical": {
+          "model": "gpt-5.3-codex-spark",
+          "effort": "low"
+        },
+        "standard": {
+          "model": "gpt-5.6-sol",
+          "effort": "medium"
+        },
+        "deep": {
+          "model": "gpt-5.6-sol",
+          "effort": "high"
+        }
+      },
+      "inChain": true
+    },
+    "reviewer_security": {
+      "title": "Güvenlik denetçisi (adversarial)",
+      "vendor": "anthropic",
+      "model": "opus",
+      "where": ".claude/workflows/sdlc.js → review:sec",
+      "why": "Kodu Codex yazdı; denetleyen Claude olmak zorunda. Aynı model kendi kör noktasını göremez.",
+      "tiers": {
+        "mechanical": {
+          "model": "sonnet"
+        },
+        "standard": {
+          "model": "opus"
+        },
+        "deep": {
+          "model": "opus"
+        }
+      },
+      "inChain": true
+    },
+    "reviewer_spec": {
+      "title": "Spec/mimari denetçisi",
+      "vendor": "anthropic",
+      "model": "sonnet",
+      "where": ".claude/workflows/sdlc.js → review:arch",
+      "why": "Karşılaştırmalı okuma işi: diff ile spec.md'yi yan yana koymak. Opus'a gerek yok.",
+      "tiers": {
+        "mechanical": {
+          "model": "haiku"
+        },
+        "standard": {
+          "model": "sonnet"
+        },
+        "deep": {
+          "model": "sonnet"
+        }
+      },
+      "inChain": true
+    },
+    "reviewer_second_opinion": {
+      "title": "İkinci görüş (opsiyonel, elle)",
+      "vendor": "openai",
+      "model": "gpt-5.6-sol",
+      "where": "scripts/sdlc/codex-review.sh — otomatik zincirde DEĞİL",
+      "why": "ZINCIRDE DEGIL — elle cagrilir. Codex kodu yazdigi icin kendi kodunu denetlemesi no_self_review kuralini kirardi; bu yuzden otomatik hatta konmaz. Insan supelendiginde: scripts/sdlc/codex-review.sh <TICKET> security",
+      "tiers": {
+        "mechanical": {
+          "model": "gpt-5.3-codex-spark",
+          "effort": "low"
+        },
+        "standard": {
+          "model": "gpt-5.6-sol",
+          "effort": "medium"
+        },
+        "deep": {
+          "model": "gpt-5.6-sol",
+          "effort": "high"
+        }
+      },
+      "effort": "medium",
+      "inChain": false
+    },
+    "tester": {
+      "title": "Test yazarı",
+      "vendor": "anthropic",
+      "model": "haiku",
+      "where": ".claude/workflows/sdlc.js → test fazı",
+      "why": "Mekanik iş: plan.md'deki her görev için test yaz, koştur, çıktıyı raporla. Önce bedava/ucuz olanı tüket.",
+      "tiers": {
+        "mechanical": {
+          "model": "haiku"
+        },
+        "standard": {
+          "model": "haiku"
+        },
+        "deep": {
+          "model": "sonnet"
+        }
+      },
+      "inChain": true
+    },
+    "uat": {
+      "title": "UAT paketleyici",
+      "vendor": "anthropic",
+      "model": "sonnet",
+      "where": ".claude/skills/uat-packager",
+      "why": "Biçimlendirme ve dil işi; teknik olmayan birinin okuyacağı tek dosyayı üretir.",
+      "tiers": {
+        "mechanical": {
+          "model": "haiku"
+        },
+        "standard": {
+          "model": "sonnet"
+        },
+        "deep": {
+          "model": "sonnet"
+        }
+      },
+      "inChain": true
+    },
+    "gatekeeper": {
+      "title": "Karar kapısı",
+      "vendor": "typesafe",
+      "model": "jev-latest",
+      "where": "gates/questions.ts + gates/evaluate.ts",
+      "why": "Kapı bir sohbet değil ölçüm: olasılık + confidence döner, kararı gates/questions.ts'teki saf fonksiyon verir. Kapı başına ≈$0.0001.",
+      "inChain": true
+    },
+    "memory": {
+      "title": "Kurum hafızası",
+      "vendor": "none",
+      "model": null,
+      "where": "ops/cognee (on-demand: make cognee-up / cognee-down) + scripts/sdlc/memory.sh",
+      "why": "Artifact'ler knowledge graph'a gider; ham transcript gitmez. Embedding YEREL (multilingual-e5-large), arama LLM'siz (searchType CHUNKS, ~5 sn), LLM yalnizca beslerken cagrilir. Olculdu 21 Eyl 2026: tam ingest $0.16, bir sorgu ~$0.0001, geri getirme top-3 %63 (esik %60, make sdlc-memory-quality ile olculuyor)."
+    },
+    "router": {
+      "title": "Yönlendirici (iş sınıfı → kademe)",
+      "vendor": "typesafe",
+      "model": "jev-latest",
+      "where": "gates/route.ts",
+      "why": "Kademeyi bir model 'hissederek' degil, olculerek seciyor: iki soru, olasilik, esik. Rota basina ~$0.0001 — yanlis kademede tek bir Codex kosusu bunun kat kat ustunde.",
+      "inChain": true
+    }
+  },
+  "rules": {
+    "no_self_review": {
+      "statement": "implementer ile reviewer_security ve reviewer_spec aynı sağlayıcıda olamaz.",
+      "why": "Aynı model ailesi aynı hatayı hem yapar hem gözden kaçırır. Heterojen review, playbook'un güvenlik kontrol listesinde de var."
+    },
+    "single_source": {
+      "statement": "Model adları yalnızca bu dosyada geçer.",
+      "why": "Model değiştirmek tek satırlık bir iş olmalı; sekiz dosyada elle aranan bir iş değil."
+    },
+    "tier_by_measurement": {
+      "statement": "Model ve efor kademesi gates/route.ts ile olculur; elle secilmez.",
+      "why": "Her isi en guclu modelde kosturmak da, her isi en ucuzda kosturmak da ayni hata: isin zorlugunu olcmemek."
+    },
+    "chain_membership": {
+      "statement": "inChain=false olan rol otomatik zincirde (.claude/workflows/sdlc.js) GECMEZ.",
+      "why": "Kadro tablosuna bakan biri, orada duran her rolun hatta kostugunu sanar. reviewer_second_opinion tam da boyle yanlis okunuyordu: kadroda var, zincirde yok. Uyelik artik yapisal bir alan ve roster.ts --check ile dogrulaniyor."
+    }
+  },
+  "tiers": {
+    "mechanical": {
+      "label": "Mekanik",
+      "when": "Plan birebir ne yapılacağını söylüyor: yeniden adlandırma, taşıma, silme, i18n/metin, sabit/konfig değişikliği, şablon doldurma. Karar verilecek bir şey yok.",
+      "why": "Burada güçlü model para yakmaktır; iş zaten planda çözülmüş."
+    },
+    "standard": {
+      "label": "Standart",
+      "when": "Repo'nun bildik bir alanında normal özellik işi. Emsali var, plan açık, dokunulan dosya sayısı sınırlı.",
+      "why": "Varsayılan. Hattın işlerinin çoğu burada olmalı."
+    },
+    "deep": {
+      "label": "Derin",
+      "when": "Algoritma, eşzamanlılık, migration, güvenlik/yetkilendirme, ödeme veya müşteri verisi; ya da emsali olmayan, birçok dosyaya yayılan iş.",
+      "why": "Burada tasarruf etmek, sonradan üretimde ödenir."
+    }
+  }
+}

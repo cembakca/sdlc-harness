@@ -1,0 +1,177 @@
+# Cognee — kurum hafizasi.
+#
+#   .env icine GEMINI_API_KEY=... ekle
+#   docker compose -f ops/cognee/compose.yml up -d
+#   scripts/sdlc/memory.sh status
+#
+# 20 Eylul 2026'da once tam yerel (Ollama qwen2.5:7b) kuruldu ve OLCULDU:
+# 16 GB'lik makinede 15 Crawlens konteyneri koserken 7B model 4.7 GB tutuyor,
+# bos bellek %22'ye dusuyor, load average 8-10 seyrediyor ve Cognee'nin LLM
+# baglanti testi 30 sn'de zaman asimina ugruyor (model soguktan kalkiyor).
+# Model bellekten atilinca bos bellek %50'ye ciktu. Bu yuzden cikarim (extraction)
+# LLM'i buluta tasindi; makinede model kalmadi.
+#
+# Ne gidiyor: yalnizca docs/sdlc/** artifact'leri — spec, plan, review, UAT.
+# Musteri verisi, secret ve ham transcript grafa hic girmiyor (memory.sh
+# ve Stop hook'u yalnizca o dizini besliyor).
+#
+# Portlar Crawlens yiginiyla cakismasin diye 8765/8766/8767'de.
+#   8765  backend API
+#   8766  MCP (Claude Code ve Codex buradan baglaniyor)
+#   8767  web arayuzu — Cognee varsayilani 3000'dir ama o port bu makinede dolu
+# PROJE ADI SABIT. Aksi halde compose adi CALISMA DIZININDEN turetir ve ayni
+# dosya farkli bir dizinden kaldirildiginda BASKA birimlere baglanir: hafiza
+# "bos" gorunur, API "Unauthorized" der, hicbir sey bozulmamis oldugu halde
+# kurum hafizasi kaybolmus sanilir (olculdu 21 Eyl 2026 — uc ayri birim cifti
+# olusmustu). Makefile da ayni adi kullanir.
+name: crawlens-cognee
+
+services:
+  cognee-backend:
+    image: cognee/cognee:main
+    container_name: cognee-backend
+    restart: unless-stopped
+    ports:
+      # SADECE LOCALHOST. "8765:8000" yazimi 0.0.0.0 VE [::] uzerine baglar, yani
+      # ayni agdaki herkes kurum hafizasina erisir (dis denetimde bulundu
+      # 21 Eyl 2026). Disari acmak isteyen COGNEE_BIND'i bilerek degistirir.
+      - "${COGNEE_BIND:-127.0.0.1}:${COGNEE_PORT:-8765}:8000"
+    environment:
+      # --- LLM: YEREL (Ollama). Anahtar yok, token yok, faturasi yok.
+      #
+      # Neden degisti (21 Eyl 2026): embedding'i yerele almak boyutu 768->384
+      # yaptigi icin graf sifirdan kuruldu ve 473 KB'lik korpus bastan varlik
+      # cikarimindan gecti. Tek seferlik bir isti ama Gemini kredisini bitirdi.
+      # Steady-state maliyet zaten dusuktu (artimli ingest sayesinde); asil
+      # tehlike SIFIRLAMA. Yerel modelde sifirlamanin parasal maliyeti sifir.
+      #
+      # LLM yalnizca GRAF KURARKEN (cognify) ve recall'un cevap sentezinde
+      # kullanilir; arama embedding ile yapilir ve o zaten yerel. Yani model
+      # SUREKLI ayakta olmak zorunda degil — "make cognee-ingest" onu acar,
+      # isi bitince kapatirsin. Bu makine 15/16 GB dolu kosuyor (olculdu), o
+      # yuzden surekli acik tutmak onerilmez.
+      #
+      # Konteynerden host'a: host.docker.internal (Docker Desktop saglar).
+      # Buluta donus TEK SATIR:
+      #   COGNEE_LLM_PROVIDER=gemini COGNEE_LLM_MODEL=gemini/gemini-3.1-flash-lite \
+      #   COGNEE_LLM_KEY="$GEMINI_API_KEY" make cognee-up
+      # OLCULDU (21 Eyl 2026): yerel model bu makinede ingest'i BITIREMIYOR —
+      # 14.5 KB'lik tek belge 15 dakikada tamamlanmadi, korpus onun 32 kati.
+      # Sebep model degil makine (77 MB bos, llama-server bosta ~2 GB).
+      # LLM YALNIZCA BESLERKEN cagrilir; arama searchType=CHUNKS ile LLM'siz
+      # kosuyor (5 sn, sifir maliyet). Yani bulut LLM'in maliyeti ingest kadar.
+      LLM_PROVIDER: "${COGNEE_LLM_PROVIDER:-gemini}"
+      LLM_MODEL: "${COGNEE_LLM_MODEL:-gemini/gemini-3.1-flash-lite}"
+      LLM_API_KEY: "${COGNEE_LLM_KEY:-${GEMINI_API_KEY:?.env icine GEMINI_API_KEY ekleyin}}"
+      LLM_TEMPERATURE: "0.0"
+      # HIZ SINIRI BASTAN ACIK. Cognee varsayilan olarak tam hizda gonderiyor ve
+      # ancak 429 YEDIKTEN sonra 15 dakika yavasliyor; olculdu 21 Eyl 2026 —
+      # tek bir ingest'te 296 "quota" + 148 "rate_limit" log satiri. O yeniden
+      # denemeler hem zaman hem kredi yakiyor. Bastan pace etmek ucuzdur.
+      LLM_RATE_LIMIT_ENABLED: "${COGNEE_RATE_LIMIT_ENABLED:-true}"
+      LLM_RATE_LIMIT_REQUESTS: "${COGNEE_RATE_LIMIT_REQUESTS:-30}"
+      LLM_RATE_LIMIT_INTERVAL: "${COGNEE_RATE_LIMIT_INTERVAL:-60}"
+      # --- Embedding: YEREL, CPU'da, anahtarsiz (fastembed / all-MiniLM-L6-v2).
+      #
+      # Neden bulutta degil: embedding cagrisi belge basina DEGIL, cikarilan her
+      # dugum basina yapilir — yani korpusun degil grafin buyuklugu kadar. Ucretin
+      # carpani buradaydi. fastembed in-process kosar, ~90 MB ONNX modeli indirir
+      # (bir kereye mahsus) ve hicbir API cagrisi yapmaz.
+      #
+      # Bu ayni zamanda VERI SINIRI kazancidir: belge metni artik embedding icin
+      # buluta gitmiyor; yalnizca LLM'in varlik cikarimi disari cikiyor.
+      #
+      # DIKKAT: boyut 768 -> 384 degisti, mevcut vektorler GECERSIZ. Saglayici ya
+      # da model degistirdiginde grafi sifirdan kurmak gerekir:
+      #   docker compose -f ops/cognee/compose.yml down -v && make cognee-up
+      #   make cognee-project && make cognee-skills && make sdlc-memory-verify
+      #
+      # Buluta donmek istersen (tek satir):
+      #   COGNEE_EMBEDDING_PROVIDER=gemini COGNEE_EMBEDDING_MODEL=gemini/gemini-embedding-001 \
+      #   COGNEE_EMBEDDING_DIMENSIONS=768 make cognee-up
+      EMBEDDING_PROVIDER: "${COGNEE_EMBEDDING_PROVIDER:-fastembed}"
+      # OLCULDU: 14 belge + kaynagi bilinen 14 parafrazli soru (belge ortasindan
+      # parca; baslik ezberi degil icerik eslesmesi olculsun diye):
+      #   all-MiniLM-L6-v2        top1 2/14   top3  5/14   (Ingilizce odakli)
+      #   multilingual-e5-large   top1 5/14   top3 11/14
+      # FTS5 anahtar kelime ayni sinavda 4/14 — kelimesi eslesen sorularda 14/14
+      # gorunuyordu, yani o skor sorularin belgeden yazilmis olmasindan geliyordu.
+      # Korpus Turkce; Ingilizce odakli model belgelerin yarisini bulamiyordu.
+      EMBEDDING_MODEL: "${COGNEE_EMBEDDING_MODEL:-intfloat/multilingual-e5-large}"
+      EMBEDDING_DIMENSIONS: "${COGNEE_EMBEDDING_DIMENSIONS:-1024}"
+      EMBEDDING_API_KEY: "${GEMINI_API_KEY}"
+      # Model konteynerin /tmp'sine iniyordu: her yeniden yaratmada 90 MB tekrar
+      # indirilir. Kalici birime al (olculdu 21 Eyl 2026).
+      FASTEMBED_CACHE_PATH: /cognee-storage/system/fastembed
+      # --- Depolama: gomulu yigin (kuzu graph + lancedb vector), ek servis yok
+      GRAPH_DATABASE_PROVIDER: kuzu
+      VECTOR_DB_PROVIDER: lancedb
+      # Arayuz giris ekrani gosteriyor; kimlik dogrulama kapaliyken varsayilan
+      # kullanicinin parolasi olmuyor ve /auth/login "Use API key authentication"
+      # diyor (olculdu 21 Eyl 2026). Acik birakiyoruz: arayuz parolayla giriyor,
+      # script'ler API anahtariyla. Servis zaten yalnizca localhost'a bagli.
+      ENABLE_BACKEND_ACCESS_CONTROL: "true"
+      # Arayuz 8767'de kosuyor; backend varsayilan olarak yalnizca UI_APP_URL'i
+      # (http://localhost:3000) kabul ediyor ve baska bir porttan gelen her
+      # cagriyi CORS'ta reddediyor — tarayicida jenerik "Cannot connect" olarak
+      # gorunur (olculdu 21 Eyl 2026). Yildiz yerine tam liste veriyoruz.
+      UI_APP_URL: "${COGNEE_UI_ORIGIN:-http://localhost:8767}"
+      CORS_ALLOWED_ORIGINS: "${COGNEE_UI_ORIGIN:-http://localhost:8767},http://127.0.0.1:8767"
+      # Her sorgudan sonraki self-tune LLM cagrisini kapat
+      AUTO_FEEDBACK: "false"
+    volumes:
+      - cognee_system:/cognee-storage/system
+      - cognee_data:/cognee-storage/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [cognee_internal]
+
+  # MCP yüzeyi: Claude Code ve Codex aynı hafızaya buradan bağlanır.
+  cognee-mcp:
+    # ON-DEMAND: varsayilan "up" bunu ACMAZ. Olculdu 21 Eyl 2026 —
+    # mcp 370 MB + ui 108 MB, ikisi de yalnizca insan/ajan bakarken lazim.
+    # Acmak icin: make cognee-full  (ya da --profile full)
+    profiles: ["full"]
+    image: cognee/cognee-mcp:main
+    container_name: cognee-mcp
+    restart: unless-stopped
+    ports:
+      - "${COGNEE_BIND:-127.0.0.1}:${COGNEE_MCP_PORT:-8766}:8000"
+    environment:
+      TRANSPORT_MODE: "http"
+      API_URL: "http://cognee-backend:8000"
+      # MCP de ayni saglayiciyi kullanir; yoksa "yerele gectik" derken bir ucta
+      # sessizce bulut kosmaya devam eder (ve fatura oradan gelir).
+      LLM_PROVIDER: "${COGNEE_LLM_PROVIDER:-gemini}"
+      LLM_MODEL: "${COGNEE_LLM_MODEL:-gemini/gemini-3.1-flash-lite}"
+      LLM_API_KEY: "${COGNEE_LLM_KEY:-${GEMINI_API_KEY}}"
+    depends_on: [cognee-backend]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [cognee_internal]
+
+  # Web arayuzu: grafi gezmek, dataset'leri gormek, sorgu denemek icin.
+  # Imaj backend adresini TARAYICIDAN gorulen haliyle okur; servis adi
+  # (cognee-backend) tarayicida cozulmez, o yuzden localhost:8765 veriyoruz.
+  cognee-ui:
+    # ON-DEMAND: varsayilan "up" bunu ACMAZ. Olculdu 21 Eyl 2026 —
+    # mcp 370 MB + ui 108 MB, ikisi de yalnizca insan/ajan bakarken lazim.
+    # Acmak icin: make cognee-full  (ya da --profile full)
+    profiles: ["full"]
+    image: cognee/cognee-ui:${COGNEE_UI_TAG:-latest}
+    container_name: cognee-ui
+    restart: unless-stopped
+    ports:
+      - "${COGNEE_BIND:-127.0.0.1}:${COGNEE_UI_PORT:-8767}:3000"
+    environment:
+      COGNEE_BACKEND_URL: "${COGNEE_BACKEND_URL:-http://localhost:8765}"
+    depends_on: [cognee-backend]
+    networks: [cognee_internal]
+
+volumes:
+  cognee_system:
+  cognee_data:
+
+networks:
+  cognee_internal:
+    driver: bridge

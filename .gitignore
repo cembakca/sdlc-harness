@@ -1,0 +1,5 @@
+# Sirlar: agents.env gercek anahtarlari tasir, uretilir — asla commit edilmez.
+ops/cognee/agents.env
+ops/cognee/.ingest-state.json
+.sdlc-worktrees/
+node_modules/

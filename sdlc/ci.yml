@@ -1,0 +1,108 @@
+name: SDLC Office
+
+# Ofis kurallari yalnizca birinin makinesinde degil, HER PR'da gecerli olsun.
+#
+# Burada MODEL CAGRISI YOK ve API anahtari gerekmiyor: yalnizca deterministik
+# denetimler kosuyor. Kapi olcumleri (Jev) pahali degil ama PR'da kosturmak
+# sir yonetimi gerektirir ve olcum zaten gelistirme sirasinda yapiliyor —
+# burada olcumun SONUCU (karar defteri) denetleniyor.
+
+# TASINABILIR: dal filtresi yok. Bu dosya hem bu repoda kosar hem de
+# scripts/sdlc/init.sh ile baska bir repoya AYNEN kurulur. Tek kaynak:
+# sdlc/ci.yml. Iki kopyanin ayrismasi selftest'te yakalanir.
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  office:
+    name: Kadro, commit disiplini ve teslim hazirligi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # commit-lint tabana kadar gecmisi ister
+          # PR'i MERGE COMMIT'i degil, DALIN UCUNU checkout et. Varsayilan
+          # davranis detached bir merge commit birakir; teslim kapisi o zaman
+          # "hangi kod?" sorusunu cevaplayamaz ve bayatlik kontrolu sessizce
+          # kapanir (dis denetimde bulundu 21 Eyl 2026).
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Kadro kurallari (kodu yazan kendi kodunu denetlemesin)
+        run: node sdlc/roster.ts --check
+
+      - name: Kalibrasyon kaydi taze mi
+        run: |
+          if [ -f gates/.last-calibration.json ]; then
+            node -e '
+              const r = JSON.parse(require("fs").readFileSync("gates/.last-calibration.json","utf8"));
+              const days = Math.floor((Date.now() - new Date(r.at).getTime()) / 86400000);
+              console.log(`son kalibrasyon: ${days} gun once · ${r.cases - r.wrong}/${r.cases} dogru · ${r.flapping} salinim`);
+              if (r.wrong > 0) { console.error("KAPILAR AYIRT EDEMIYOR — duzeltilmeden PR birlestirilmemeli"); process.exit(1); }
+              if (r.flapping > 0) { console.error("KAPILAR SALINIYOR — ayni girdide farkli karar veriyorlar"); process.exit(1); }
+              // repeats<2 ise salinim OLCULMEMIS demektir; "flapping: 0" bos guvence.
+              if (!(r.repeats >= 2)) { console.error(`kalibrasyon ${r.repeats}x kosmus — salinim olculmemis (en az 2 gerekir)`); process.exit(1); }
+              if (days > 45) { console.error(`kalibrasyon ${days} gundur yenilenmemis`); process.exit(1); }
+            '
+          else
+            echo "kalibrasyon kaydi yok — make sdlc-calibrate"
+            exit 1
+          fi
+
+      - name: Repoya sir girmis mi
+        run: scripts/sdlc/secret-scan.sh
+
+      - name: Durum makinesi saglam mi (olu faz yok)
+        run: node gates/chain.ts
+
+      - name: Orkestrasyon kuru kosumda yuruyor mu
+        run: node scripts/sdlc/workflow-dryrun.mjs
+
+      - name: Durdurucular gercekten durduruyor mu (regresyon)
+        run: scripts/sdlc/selftest.sh
+
+      - name: Ticket dali mi, degilse burada bitir
+        id: ticket
+        run: |
+          # BIR BILETI BILET YAPAN SEY BELGELERIDIR, dal adi degil.
+          # Ilk gercek CI kosusunda olculdu (21 Eyl 2026): bu harness'in KENDI
+          # PR'i "sdlc/office-ci" dalindan geldigi icin "office-ci" adinda bir
+          # bilet sanildi ve olmayan artifact'leri arandi — CI, bilet olmayan bir
+          # degisikligi teslim kapisindan gecirmeye calisti.
+          BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          TICKET=""
+          case "$BRANCH" in
+            sdlc/*)
+              T="${BRANCH#sdlc/}"
+              if [ -d "docs/sdlc/$T" ]; then
+                TICKET="$T"
+              else
+                echo "dal adi sdlc/ ile basliyor ama docs/sdlc/$T yok — bu bir bilet degil"
+              fi
+              ;;
+            *) echo "ticket dali degil ($BRANCH) — bilete ozgu denetimler atlaniyor" ;;
+          esac
+          echo "ticket=$TICKET" >> "$GITHUB_OUTPUT"
+
+      - name: Commit disiplini (bir plan gorevi = bir commit)
+        if: steps.ticket.outputs.ticket != ''
+        # "|| true" KALDIRILDI. Kirilamayan kural, kural degildir: linter dogru
+        # olcuyordu ama sonucu hicbir seyi degistirmiyordu (olculdu 21 Eyl 2026 —
+        # F4-1'de 10 plan gorevi vardi, 0 gorev commit'i, CI yesil).
+        run: scripts/sdlc/commit-lint.sh "${{ steps.ticket.outputs.ticket }}"
+
+      - name: Teslim hazirligi (modelsiz — kayitlari okur)
+        if: steps.ticket.outputs.ticket != ''
+        # Kapi hangi koda baktigini BILMELI: worktree CI'da yok, bu yuzden
+        # PR'in head SHA'si acikca gecilir.
+        env:
+          SDLC_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node gates/readiness.ts "${{ steps.ticket.outputs.ticket }}"
+
+      - name: Karar defteri ozeti
+        if: steps.ticket.outputs.ticket != ''
+        run: node gates/history.ts "${{ steps.ticket.outputs.ticket }}" >> "$GITHUB_STEP_SUMMARY"
