@@ -22,6 +22,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # commit-lint tabana kadar gecmisi ister
+          submodules: recursive   # harness submodule olarak bagliysa o da gelmeli
           # PR'i MERGE COMMIT'i degil, DALIN UCUNU checkout et. Varsayilan
           # davranis detached bir merge commit birakir; teslim kapisi o zaman
           # "hangi kod?" sorusunu cevaplayamaz ve bayatlik kontrolu sessizce
@@ -32,14 +33,22 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Harness nerede (ayni dosya iki duzende de kossun)
+        # Harness kendi reposunda ROOT'un kendisidir; tuketen repoda submodule
+        # olarak sdlc-harness/ altindadir. Yollari sabitlemek, bu dosyanin iki
+        # kopyasini ayristirir — tek kaynak olmaktan cikar.
+        run: |
+          if [ -d sdlc-harness/gates ]; then echo "SDLC=sdlc-harness/" >> "$GITHUB_ENV"
+          else echo "SDLC=" >> "$GITHUB_ENV"; fi
+
       - name: Kadro kurallari (kodu yazan kendi kodunu denetlemesin)
-        run: node sdlc/roster.ts --check
+        run: node ${SDLC}sdlc/roster.ts --check
 
       - name: Kalibrasyon kaydi taze mi
         run: |
-          if [ -f gates/.last-calibration.json ]; then
+          if [ -f ${SDLC}gates/.last-calibration.json ]; then
             node -e '
-              const r = JSON.parse(require("fs").readFileSync("gates/.last-calibration.json","utf8"));
+              const r = JSON.parse(require("fs").readFileSync((process.env.SDLC || "")+"gates/.last-calibration.json","utf8"));
               const days = Math.floor((Date.now() - new Date(r.at).getTime()) / 86400000);
               console.log(`son kalibrasyon: ${days} gun once · ${r.cases - r.wrong}/${r.cases} dogru · ${r.flapping} salinim`);
               if (r.wrong > 0) { console.error("KAPILAR AYIRT EDEMIYOR — duzeltilmeden PR birlestirilmemeli"); process.exit(1); }
@@ -54,16 +63,16 @@ jobs:
           fi
 
       - name: Repoya sir girmis mi
-        run: scripts/sdlc/secret-scan.sh
+        run: ${SDLC}scripts/sdlc/secret-scan.sh
 
       - name: Durum makinesi saglam mi (olu faz yok)
-        run: node gates/chain.ts
+        run: node ${SDLC}gates/chain.ts
 
       - name: Orkestrasyon kuru kosumda yuruyor mu
-        run: node scripts/sdlc/workflow-dryrun.mjs
+        run: node ${SDLC}scripts/sdlc/workflow-dryrun.mjs
 
       - name: Durdurucular gercekten durduruyor mu (regresyon)
-        run: scripts/sdlc/selftest.sh
+        run: ${SDLC}scripts/sdlc/selftest.sh
 
       - name: Ticket dali mi, degilse burada bitir
         id: ticket
@@ -93,7 +102,7 @@ jobs:
         # "|| true" KALDIRILDI. Kirilamayan kural, kural degildir: linter dogru
         # olcuyordu ama sonucu hicbir seyi degistirmiyordu (olculdu 21 Eyl 2026 —
         # F4-1'de 10 plan gorevi vardi, 0 gorev commit'i, CI yesil).
-        run: scripts/sdlc/commit-lint.sh "${{ steps.ticket.outputs.ticket }}"
+        run: ${SDLC}scripts/sdlc/commit-lint.sh "${{ steps.ticket.outputs.ticket }}"
 
       - name: Teslim hazirligi (modelsiz — kayitlari okur)
         if: steps.ticket.outputs.ticket != ''
@@ -101,8 +110,8 @@ jobs:
         # PR'in head SHA'si acikca gecilir.
         env:
           SDLC_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: node gates/readiness.ts "${{ steps.ticket.outputs.ticket }}"
+        run: node ${SDLC}gates/readiness.ts "${{ steps.ticket.outputs.ticket }}"
 
       - name: Karar defteri ozeti
         if: steps.ticket.outputs.ticket != ''
-        run: node gates/history.ts "${{ steps.ticket.outputs.ticket }}" >> "$GITHUB_STEP_SUMMARY"
+        run: node ${SDLC}gates/history.ts "${{ steps.ticket.outputs.ticket }}" >> "$GITHUB_STEP_SUMMARY"

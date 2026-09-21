@@ -78,7 +78,14 @@ require_up() {
   #
   # Kapatmak isteyen: make cognee-down (2.3 GB geri gelir).
   # Otomatik acilis opt-in. Baska repoda compose dosyasi olmayabilir.
-  COMPOSE="${SDLC_MEMORY_COMPOSE:-$ROOT/ops/cognee/compose.yml}"
+  # compose.yml HARNESS'in altyapisi, projenin degil: harness ayri repoya
+  # alindiginda $ROOT/ops/cognee altinda DURMAZ. Once proje koku (eski duzen
+  # ve projeye ozel ozelleştirme), sonra harness koku.
+  COMPOSE="${SDLC_MEMORY_COMPOSE:-}"
+  if [ -z "$COMPOSE" ]; then
+    if [ -f "$ROOT/ops/cognee/compose.yml" ]; then COMPOSE="$ROOT/ops/cognee/compose.yml"
+    else COMPOSE="$(sdlc_harness_root)/ops/cognee/compose.yml"; fi
+  fi
   if [ "${MEMORY_AUTOSTART:-0}" = "1" ] && [ -f "$COMPOSE" ]; then
     echo "cognee kapali — aciliyor (e5-large yuklenecek, ~60-90 sn)" >&2
     PROJECT_NAME="$(cfgp name)"

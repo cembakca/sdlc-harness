@@ -691,6 +691,16 @@ if diff -q "$HARNESS/sdlc/ci.yml" "$HARNESS/.github/workflows/sdlc-office.yml" >
 else
   printf '  ✗ %s\n' "CI şablonu ayrışmış — yeni projeye zayıf kapı kurulur"; FAIL=$((FAIL+1))
 fi
+# Tuketen repodaki kopya da ayni dosya olmali. Harness submodule olunca CI
+# projenin .github/workflows altindan kosar; o kopya sessizce eskirse PR yesil
+# gorunurken kapilar eski surumu zorlar.
+if [ "$ROOT" != "$HARNESS" ] && [ -f "$ROOT/.github/workflows/sdlc-office.yml" ]; then
+  if diff -q "$HARNESS/sdlc/ci.yml" "$ROOT/.github/workflows/sdlc-office.yml" >/dev/null 2>&1; then
+    printf '  ✓ %s\n' "projedeki CI kopyasi harness ile ayni"; PASS=$((PASS+1))
+  else
+    printf '  ✗ %s\n' "projedeki CI kopyasi eskimis — cp \$SDLC/sdlc/ci.yml .github/workflows/sdlc-office.yml"; FAIL=$((FAIL+1))
+  fi
+fi
 # Sablon gercekten teslim kapisini ve durduruculari kosturuyor mu?
 CI_MISS=""
 for step in "selftest.sh" "commit-lint.sh" "readiness.ts" "last-calibration"; do

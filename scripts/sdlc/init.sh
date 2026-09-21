@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# SDLC orkestratorunu BASKA BIR REPOYA kurar.
+# SDLC harness'ini BASKA BIR REPOYA baglar.
 #
 #   scripts/sdlc/init.sh                      # BU repoda project.json iskeleti uret
-#   scripts/sdlc/init.sh --target /yol/repo   # orkestratoru o repoya KUR + iskeleti uret
+#   scripts/sdlc/init.sh --target /yol/repo   # harness'i submodule olarak BAGLA + iskelet
 #   scripts/sdlc/init.sh --target /yol/repo --force
 #
-# "Tek dosya degisir" iddiasi yalnizca YAPILANDIRMA icin dogruydu: kapilar,
-# script'ler, workflow, beceriler ve CI yine elle tasinmak zorundaydi (dis
-# denetimde bulundu 21 Eyl 2026). --target bunu yapar; tasidigi her dosyayi
-# listeler ve sonunda kurulumu DOGRULAR.
+# Once kopyaliyordu. Kopya, harness guncellendiginde sessizce eskiyen ikinci bir
+# kaynaktir: hedef repo yesil gorunurken eski kapilari zorlar. Artik submodule
+# bir SURUM isaret eder; guncelleme acik bir hareket, surum de commit'te yazili.
+#
+# Kopyalanan tek sey projeye AIT olanlar: CI dosyasi (GitHub yalnizca
+# .github/workflows'tan okur; selftest iki kopyanin ayrismasini yakalar),
+# belge sablonlari ve project.json iskeleti.
 #
 # Tasimadigi tek sey karar: project.json iskeletini insan gozden gecirir.
 set -uo pipefail
@@ -16,6 +19,7 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 
 TARGET=""; FORCE=""
 while [ $# -gt 0 ]; do
@@ -31,75 +35,59 @@ if [ -n "$TARGET" ]; then
   [ "$TARGET" = "$ROOT" ] && { echo "hedef kaynakla ayni" >&2; exit 1; }
   git -C "$TARGET" rev-parse --git-dir >/dev/null 2>&1 || { echo "hedef bir git reposu degil: $TARGET" >&2; exit 1; }
 
-  echo "== orkestrator kuruluyor → $TARGET"
-  COPIED=0
-  copy() { # copy <kaynak-yol> — dizin ya da dosya, hedefte ayni yere
-    local rel="$1" src="$ROOT/$1" dst="$TARGET/$1"
-    [ -e "$src" ] || return 0
-    if [ -e "$dst" ] && [ -z "$FORCE" ]; then echo "  atlandi (var): $rel"; return 0; fi
-    mkdir -p "$(dirname "$dst")"
-    if [ -d "$src" ]; then
-      mkdir -p "$dst"
-      cp -R "$src/." "$dst/"
-    else
-      cp "$src" "$dst"
-    fi
-    echo "  kuruldu: $rel"; COPIED=$((COPIED+1))
-  }
+  echo "== harness baglaniyor → $TARGET"
 
-  # Kapilar, script'ler, kadro, workflow, beceriler, CI. Kaynak repoya ait
-  # son kalibrasyon olcumunu ve test istisnalarini hedefe tasimiyoruz.
-  for source in "$ROOT"/gates/*.ts "$ROOT"/gates/*.md; do
-    [ -f "$source" ] && copy "gates/$(basename "$source")"
-  done
-  copy gates/fixtures
-  for source in "$ROOT"/scripts/sdlc/*; do
-    [ -f "$source" ] || continue
-    case "$(basename "$source")" in
-      selftest.sh|cognee-bootstrap.sh) continue ;; # kaynak repo ve Cognee kurulumuna ozgu
-    esac
-    copy "scripts/sdlc/$(basename "$source")"
-  done
-  copy sdlc/roster.json
-  copy sdlc/roster.ts
-  copy sdlc/orchestrator.mjs
-  copy sdlc/project.ts
-  copy .claude/workflows/sdlc.js
-  for sk in sdlc brd-analyst architect uat-packager; do copy ".claude/skills/$sk"; done
-  copy docs/sdlc/templates
-  mkdir -p "$TARGET/docs/sdlc"
-  if [ ! -e "$TARGET/docs/sdlc/known-flaky.txt" ]; then
-    : > "$TARGET/docs/sdlc/known-flaky.txt"
-    echo "  kuruldu: docs/sdlc/known-flaky.txt (bos)"
+  # KOPYALAMIYORUZ. Kopya, harness guncellendiginde sessizce eskiyen ikinci bir
+  # kaynak olur; hedef repo "yesil" gorunurken eski kapilari zorlar. Submodule
+  # bunun yerine bir SURUM isaret eder: guncellemek acik bir hareket olur
+  # (git submodule update --remote) ve hangi surumde oldugu commit'te yazar.
+  SUB="${SDLC_SUBMODULE_PATH:-sdlc-harness}"
+  ORIGIN="$(git -C "$HARNESS" remote get-url origin 2>/dev/null)"
+  if [ -z "$ORIGIN" ]; then
+    echo "harness reposunun 'origin' uzak adresi yok — once yayinlayin" >&2
+    exit 1
   fi
+
+  if [ -e "$TARGET/$SUB" ] && [ -z "$FORCE" ]; then
+    echo "  atlandi (var): $SUB"
+  else
+    ( cd "$TARGET" && git submodule add ${FORCE:+--force} "$ORIGIN" "$SUB" ) || exit 1
+    echo "  baglandi: $SUB → $ORIGIN"
+  fi
+
+  # Beceriler ve workflow proje kokunden GORUNUR olmali (.claude taranir),
+  # ama tek kaynak yine submodule: sembolik bag, kopya degil.
+  mkdir -p "$TARGET/.claude/skills" "$TARGET/.claude/workflows"
+  for sk in sdlc brd-analyst architect uat-packager; do
+    [ -e "$TARGET/.claude/skills/$sk" ] && [ -z "$FORCE" ] && continue
+    rm -rf "$TARGET/.claude/skills/$sk"
+    ln -s "../../$SUB/.claude/skills/$sk" "$TARGET/.claude/skills/$sk"
+  done
+  if [ ! -e "$TARGET/.claude/workflows/sdlc.js" ] || [ -n "$FORCE" ]; then
+    rm -f "$TARGET/.claude/workflows/sdlc.js"
+    ln -s "../../$SUB/.claude/workflows/sdlc.js" "$TARGET/.claude/workflows/sdlc.js"
+  fi
+
+  mkdir -p "$TARGET/docs/sdlc"
+  [ -e "$TARGET/docs/sdlc/templates" ] || cp -R "$HARNESS/docs/sdlc/templates" "$TARGET/docs/sdlc/templates" 2>/dev/null
+  [ -e "$TARGET/docs/sdlc/known-flaky.txt" ] || : > "$TARGET/docs/sdlc/known-flaky.txt"
+
   if [ ! -f "$TARGET/.github/workflows/sdlc-office.yml" ] || [ -n "$FORCE" ]; then
     mkdir -p "$TARGET/.github/workflows"
-    cp "$ROOT/sdlc/ci.yml" "$TARGET/.github/workflows/sdlc-office.yml"
-    echo "  kuruldu: .github/workflows/sdlc-office.yml"
+    cp "$HARNESS/sdlc/ci.yml" "$TARGET/.github/workflows/sdlc-office.yml"
+    echo "  kuruldu: .github/workflows/sdlc-office.yml  (tek kopya; selftest ayrismayi yakalar)"
   fi
 
-  # Make hedefleri ayri bir dosyaya: hedefin kendi Makefile'ini EZMEYIZ.
-  if [ -z "$FORCE" ] && [ -f "$TARGET/sdlc.mk" ]; then
-    echo "  atlandi (var): sdlc.mk"
-  else
-    awk '
-      /^# -+ AI-native SDLC/ { inside=1 }
-      /^## --- kurum hafizasi/ { inside=0 }
-      inside && /^sdlc-selftest:/ { skip=2 }
-      inside && skip>0 { skip--; next }
-      inside { print }
-    ' "$ROOT/Makefile" > "$TARGET/sdlc.mk"
-    echo "  kuruldu: sdlc.mk  (Makefile'ina ekle:  include sdlc.mk)"
-  fi
-
-  echo "== $COPIED oge kuruldu"
   echo ""
   echo "== iskelet uretiliyor (hedef repoda)"
-  "$TARGET/scripts/sdlc/init.sh" $FORCE || exit $?
+  SDLC_PROJECT_ROOT="$TARGET" "$TARGET/$SUB/scripts/sdlc/init.sh" $FORCE || exit $?
 
   echo ""
-  echo "== kurulum dogrulanıyor (hedef repoda, modelsiz)"
-  ( cd "$TARGET" && node sdlc/roster.ts --check && node gates/chain.ts >/dev/null && node scripts/sdlc/workflow-dryrun.mjs && node -e 'JSON.parse(require("fs").readFileSync("sdlc/project.json"))' )
+  echo "== kurulum dogrulaniyor (hedef repoda, modelsiz)"
+  ( cd "$TARGET" && node "$SUB/sdlc/roster.ts" --check \
+      && node "$SUB/gates/chain.ts" >/dev/null \
+      && node "$SUB/scripts/sdlc/workflow-dryrun.mjs" \
+      && node -e 'JSON.parse(require("fs").readFileSync("sdlc/project.json"))' )
   RC=$?
   echo ""
   if [ "$RC" = "0" ]; then
@@ -111,7 +99,11 @@ if [ -n "$TARGET" ]; then
   echo "SIRA INSANDA:"
   echo "  1. sdlc/project.json: test komutlari, servisler, kritik yuzeyler"
   echo "  2. .claude/CLAUDE.md: bu reponun anayasasi"
-  echo "  3. Makefile: include sdlc.mk"
+  echo "  3. Makefile'a:"
+  echo "       SDLC = $SUB/"
+  echo "       SDLC_COMPOSE_PROJECT = <proje>-cognee"
+  echo "       SDLC_PROJECT_DATASET = <proje>_project"
+  echo "       include \$(SDLC)sdlc.mk"
   echo "  4. hafiza opsiyonel; MEMORY_AUTOSTART=0 varsayilandir"
   exit "$RC"
 fi
