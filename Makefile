@@ -7,7 +7,21 @@
 SDLC =
 include sdlc.mk
 
-.PHONY: selftest
-selftest: ## Durdurucular gercekten durduruyor mu (uretilen ornek proje uzerinde)
+SHAPES = tek coklu monorepo
+
+.PHONY: selftest selftest-shapes
+selftest: ## Durdurucular gercekten durduruyor mu (varsayilan ornek proje)
 	@P="$$(fixtures/make-project.sh)" && echo "ornek proje: $$P" && \
 	 SDLC_PROJECT_ROOT="$$P" scripts/sdlc/selftest.sh
+
+# Harness'in "tasinabilir" iddiasinin tek kaniti uzerinde kostugu projelerdi ve
+# o da TEK bir bicimdi. Cok yiginli ve ic ice duzenler farkli kod yollarini
+# calistirir: yigin secimi, desen onceligi, yigin basina ortam dosyasi.
+selftest-shapes: ## Ayni suiti uc proje bicimi uzerinde kostur
+	@for s in $(SHAPES); do \
+	  P="$$(fixtures/make-project.sh $$s)" || exit 1; \
+	  echo "── bicim: $$s"; \
+	  OUT="$$(SDLC_PROJECT_ROOT="$$P" scripts/sdlc/selftest.sh)"; RC=$$?; \
+	  printf '%s\n' "$$OUT" | tail -2; \
+	  [ "$$RC" = "0" ] || exit "$$RC"; \
+	done

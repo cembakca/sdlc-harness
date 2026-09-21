@@ -38,6 +38,25 @@ function re(pattern: string): string | null {
   }
 }
 
+/**
+ * Desenden temsili bir yol uretir: "^apps/api/" -> "apps/api/x".
+ *
+ * Yalnizca DUZ metin onekini okur; ilk duzenli-ifade metakarakterinde durur.
+ * Onek yoksa null doner — o desen icin ornek uretilemez ve golge kontrolu
+ * sessizce atlanir. Yanlis bir ornek uydurup yanlis hata basmaktansa
+ * olcmemek dogrudur.
+ */
+function samplePath(pattern: string): string | null {
+  const body = pattern.startsWith("^") ? pattern.slice(1) : pattern;
+  let literal = "";
+  for (const ch of body) {
+    if ("\\.*+?()[]{}|$".includes(ch)) break;
+    literal += ch;
+  }
+  if (!literal) return null;
+  return literal.endsWith("/") ? `${literal}x` : literal;
+}
+
 export function validate(rawText: string, root: string): Problem[] {
   const p: Problem[] = [];
   const add = (level: Problem["level"], where: string, what: string, fix?: string) =>
@@ -134,6 +153,27 @@ export function validate(rawText: string, root: string): Problem[] {
       }
       if (!s?.soloCommand) {
         add("warn", at, "soloCommand yok — üçgenleme (tek testi yalnız koşturma) yapılamaz");
+      }
+    });
+  }
+
+  // --- yığın seçimi: gölgede kalan yığın var mı ----------------------------
+  // Yığın seçimi İLK eşleşmeyi alır (`stackFor`). Daha genel bir desen daha
+  // öndeyse, arkasındaki yığına hiçbir değişiklik ulaşmaz: testleri hiç koşmaz
+  // ve bunu kimse fark etmez — "geçti" görünür. Monorepo düzenlerinde
+  // `^apps/` ile `^apps/api/` yan yana durduğunda olan tam budur.
+  if (Array.isArray(cfg.stacks)) {
+    const usable = cfg.stacks.filter(
+      (s: any) => typeof s?.changedPattern === "string" && !re(s.changedPattern),
+    );
+    usable.forEach((s: any, i: number) => {
+      const sample = samplePath(s.changedPattern);
+      if (sample === null) return; // desen bir yol ornegi uretmiyor: sessiz kal
+      const winner = usable.find((o: any) => new RegExp(o.changedPattern).test(sample));
+      if (winner && winner !== s) {
+        add("error", `stacks[${i}] (${s.name})`,
+            `bu yığına hiçbir değişiklik ulaşmaz: "${sample}" önce "${winner.name}" yığınına düşüyor`,
+            `daha genel olan "${winner.name}" desenini listede sona alın`);
       }
     });
   }

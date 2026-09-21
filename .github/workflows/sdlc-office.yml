@@ -95,7 +95,14 @@ jobs:
           if [ -f sdlc/project.json ]; then
             ${SDLC}scripts/sdlc/selftest.sh
           else
-            SDLC_PROJECT_ROOT="$(${SDLC}fixtures/make-project.sh)" ${SDLC}scripts/sdlc/selftest.sh
+            # Harness reposu: suit UC proje bicimi uzerinde kosar. Tek bicim,
+            # "tasinabilir" iddiasini kanitlamiyordu (olculdu 22 Eyl 2026 —
+            # cok yiginli ve ic ice duzenler farkli kod yollarini calistirir).
+            for shape in tek coklu monorepo; do
+              echo "── bicim: $shape"
+              SDLC_PROJECT_ROOT="$(${SDLC}fixtures/make-project.sh "$shape")" \
+                ${SDLC}scripts/sdlc/selftest.sh
+            done
           fi
 
       - name: Ticket dali mi, degilse burada bitir

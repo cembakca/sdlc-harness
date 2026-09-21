@@ -53,14 +53,19 @@ sır yolu. Bozuk JSON artık varsayılanlara düşmez — sesli düşer.
 ## Kendini sınama
 
 ```bash
-./scripts/sdlc/selftest.sh                       # tüketen repo içinde
-P="$(fixtures/make-project.sh)" \
-  SDLC_PROJECT_ROOT="$P" ./scripts/sdlc/selftest.sh   # tek başına
+./scripts/sdlc/selftest.sh   # tüketen repo içinde
+make selftest                # harness reposunda (örnek proje üretilir)
+make selftest-shapes         # aynı suit üç proje biçimi üzerinde
 ```
 
-`fixtures/make-project.sh` **kendi git deposu olan** geçici bir örnek proje
-üretir. Harness reposunun içinde duran bir proje iç içe depo olurdu ve dal/HEAD
-sorguları harness'ın dalını döndürürdü — o zaman "taban dal ilerledi" gibi
+`fixtures/make-project.sh [tek|coklu|monorepo]` örnek projeyi üretir:
+tek yığın, iki yığın (`envFiles` + typecheck), iç içe monorepo. Biçimler farklı
+kod yollarını koşturur — yığın seçimi, desen önceliği, yığın başına ortam
+dosyası. Tek biçim, "taşınabilir" iddiasını kanıtlamıyordu.
+
+Örnek proje **kendi git deposu olan** geçici bir dizindir. Harness reposunun
+içinde dursaydı iç içe depo olurdu ve dal/HEAD sorguları harness'ın dalını
+döndürürdü — o zaman "taban dal ilerledi" gibi
 senaryolar ölçmedikleri şeyi ölçmüş olur.
 
 ## Kurallar

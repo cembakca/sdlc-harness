@@ -782,6 +782,34 @@ else
   printf '  ✗ %s\n' "gerçek proje dosyaları genel fixture dizinine karışmış"; FAIL=$((FAIL+1))
 fi
 
+# --- Yigin secimi: her yigina gercekten is dusuyor mu --------------------
+# Yigin secimi ILK eslesmeyi alir. Daha genel bir desen ondeyse arkasindaki
+# yigina hicbir degisiklik ulasmaz: testleri hic kosmaz ve "gecti" gorunur.
+# Bu kontrol PROJENIN kendi yapilandirmasi uzerinde kosar, o yuzden her bicimde
+# (tek / coklu / monorepo) farkli bir yolu zorlar.
+ROUTE_OUT="$(SDLC_PROJECT_ROOT="$ROOT" node -e '
+const { loadProject, stackFor } = await import(process.argv[1] + "/sdlc/project.ts");
+const stacks = loadProject().stacks;
+const bad = [];
+for (const s of stacks) {
+  const body = s.changedPattern.startsWith("^") ? s.changedPattern.slice(1) : s.changedPattern;
+  let lit = "";
+  for (const ch of body) { if ("\\.*+?()[]{}|$".includes(ch)) break; lit += ch; }
+  if (!lit) continue;
+  const sample = lit.endsWith("/") ? lit + "x" : lit;
+  const got = stackFor(sample);
+  if (!got || got.name !== s.name) bad.push(`${s.name}: "${sample}" -> ${got ? got.name : "hicbiri"}`);
+}
+console.log(JSON.stringify({ count: stacks.length, bad }));
+' "$HARNESS" 2>&1)" || ROUTE_OUT=""
+ROUTE_BAD="$(printf '%s' "$ROUTE_OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).bad.join(" · "))}catch{console.log("OKUNAMADI: "+s.slice(0,120))}})')"
+ROUTE_N="$(printf '%s' "$ROUTE_OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).count)}catch{console.log("?")}})')"
+if [ -z "$ROUTE_BAD" ]; then
+  printf '  ✓ %s\n' "her yığına kendi değişikliği düşüyor ($ROUTE_N yığın, gölgede kalan yok)"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "yığın gölgede kalıyor — $ROUTE_BAD"; FAIL=$((FAIL+1))
+fi
+
 # --- Yapilandirma dogrulayicisi gercekten durduruyor mu ------------------
 # Yapilandirma harness'in TEK projeye ozgu girdisi ve uzun sure hic
 # denetlenmiyordu. Bozuk bir alan hatti durdurmaz, SESSIZCE yanlis calistirir:
@@ -807,6 +835,7 @@ vcheck "hiçbir yolu eşleştirmeyen desen durdurur" 1 '{"schemaVersion":1,"name
 vcheck "watch modundaki test komutu durdurur" 1 '{"schemaVersion":1,"name":"p","stacks":[{"name":"a","root":"src","changedPattern":"^src/","testCommand":"vitest"}]}'
 vcheck "geçersiz düzenli ifade durdurur" 1 '{"schemaVersion":1,"name":"p","stacks":[{"name":"a","root":"src","changedPattern":"^src/","testCommand":"true","failureFilePattern":"([a-z"}]}'
 vcheck "hafızaya sır yolu vermek durdurur" 1 '{"schemaVersion":1,"name":"p","memory":{"productDocs":[".env"]},"stacks":[{"name":"a","root":"src","changedPattern":"^src/","testCommand":"true"}]}'
+vcheck "gölgede kalan yığın durdurur" 1 '{"schemaVersion":1,"name":"p","stacks":[{"name":"hepsi","root":"src","changedPattern":"^src/","testCommand":"true"},{"name":"ic","root":"src","changedPattern":"^src/ic/","testCommand":"true"}]}'
 vcheck "harness şemadan eskiyse durdurur" 1 '{"schemaVersion":999,"name":"p","stacks":[{"name":"a","root":"src","changedPattern":"^src/","testCommand":"true"}]}'
 rm -rf "$VD"
 

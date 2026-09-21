@@ -24,6 +24,10 @@ sessizce yanlış okumaz.
 
 `schemaVersion` yazılmamışsa 1 varsayılır ve uyarı basılır.
 
+Denetim ayrıca **gölgede kalan yığını** yakalar: yığın seçimi ilk eşleşmeyi
+alır, o yüzden `^apps/` deseni `^apps/api/` deseninin önündeyse ikinci yığına
+hiçbir değişiklik ulaşmaz ve testleri hiç koşmadan "geçti" görünür.
+
 ## Sürümsüz dönem — 21 Eylül 2026
 
 Harness `dc-archive` reposunun içinde yaşıyordu. Kendi reposuna alındı ve
