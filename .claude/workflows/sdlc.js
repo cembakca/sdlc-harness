@@ -247,12 +247,47 @@ if (specDecision === "pass") {
   spec = `${dir}/spec.md mevcut ve spec kapısını geçti; bu turda yeniden yazılmadı.`;
 } else {
   specRewritten = true;
-  log(`${ticket}: intent.md okunuyor, spec.md üretiliyor`);
+
+  // DUZELTME TURUNUN GERI BILDIRIM KANALI.
+  //
+  // Kapi blokladiginda analist NEDEN bloklandigini hic ogrenmiyordu: bir
+  // sonraki kosuda spec'i sifirdan yaziyor, insanin duzeltmesi de cope
+  // gidiyordu. Yani dongu vardi ama ogrenme yoktu — ayni belge ayni sekilde
+  // yeniden yazilip ayni kapiya tosluyordu (olculdu 22 Eyl 2026, M1'in ilk
+  // uctan uca kosusunda: 18 kriterin 17'si esigin altinda kaldi ve hicbiri
+  // analiste geri donmedi).
+  //
+  // Teshis bir model cagrisidir (~6k token) ama bosa giden bir spec turundan
+  // ucuzdur; yalnizca ZATEN VAR OLAN ve bloklanan bir belge icin kosar.
+  let weakness = "";
+  const specOnDisk = parseJson(
+    (await command("node", ["-e",
+      "console.log(JSON.stringify({exists:require('fs').existsSync(process.argv[1])}))",
+      `${dir}/spec.md`])).stdout
+  )?.exists === true;
+
+  if (specOnDisk && specDecision !== "unknown") {
+    const diag = (await command("node", ["gates/diagnose.ts", `${dir}/spec.md`], [0, 1])).stdout;
+    weakness =
+      `\n\nBU BELGE ZATEN VAR VE KAPI ONU DURDURDU. Kapinin madde madde olcumu:\n` +
+      `${diag}\n` +
+      `BASTAN YAZMA. Yukaridaki puani DUSUK maddeleri yeniden yaz; esigi gecenlere ` +
+      `dokunma. Dusuk puanin iki tipik sebebi: (a) tek maddede birden cok tetikleyici ` +
+      `ve birden cok iddia var — bolunmeli, her madde tek bir gozlenebilir davranis ` +
+      `anlatmali; (b) madde bir UYGULAMA kisitini anlatiyor ("su sabitten turetilmeli") ` +
+      `— gozlenebilir davranisa cevrilmeli. Belgenin geri kalanini oldugu gibi koru.`;
+  }
+
+  log(
+    specOnDisk && weakness
+      ? `${ticket}: spec.md kapida durdu — zayif maddeler analiste geri veriliyor`
+      : `${ticket}: intent.md okunuyor, spec.md üretiliyor`
+  );
   spec = await agent(
     `brd-analyst skill'ini oku. ${dir}/intent.md dosyasından ${dir}/spec.md için ` +
       `İngilizce, EARS tarzı ölçülebilir kabul kriterleri, kapsam dışı başlığı ve ` +
       `açık sorular içeren TAM Markdown belgeyi döndür. İlk karakter # olsun. ` +
-      `Dosya yazma; belgeyi orkestratör kaydedecek.` + memory,
+      `Dosya yazma; belgeyi orkestratör kaydedecek.` + memory + weakness,
     { label: "spec", model: pick(rAnalysis, "analyst", "opus") }
   );
   writeArtifact(`${dir}/spec.md`, spec);
