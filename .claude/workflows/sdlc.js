@@ -200,7 +200,9 @@ phase("ölçüm");
 // Kaç düzeltme turu döndük? Karar defterindeki build kayıtları sayılır.
 const roundCount = parseJson(
   (await command("node", ["--input-type=module", "-e",
-    "const {read}=await import('./gates/journal.ts'); console.log(JSON.stringify({rounds:read(process.argv[1]).filter(x=>x.gate==='postbuild').length}))",
+    // Defter HARNESS'in kodu, projenin degil: calisma dizini proje koku oldugu
+    // icin goreli './gates/...' projede aranir ve bulunamaz.
+    "const {read}=await import(process.env.SDLC_HARNESS+'/gates/journal.ts'); console.log(JSON.stringify({rounds:read(process.argv[1]).filter(x=>x.gate==='postbuild').length}))",
     ticket])).stdout
 )?.rounds ?? 0;
 

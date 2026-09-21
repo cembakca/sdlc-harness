@@ -16,6 +16,7 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 TICKET="${1:?kullanim: test.sh <TICKET> [--client]}"
 FORCE_ALL="${2:-}"
 DIR="$ROOT/docs/sdlc/$TICKET"
@@ -24,9 +25,9 @@ OUT="$DIR/TESTS.md"
 KNOWN="$ROOT/docs/sdlc/known-flaky.txt"
 
 [ -d "$WT" ] || { echo "worktree yok: $WT" >&2; exit 20; }
-bash "$ROOT/scripts/sdlc/worktree-clean.sh" "$TICKET" >/dev/null || exit 20
+bash "$HARNESS/scripts/sdlc/worktree-clean.sh" "$TICKET" >/dev/null || exit 20
 
-cfg() { node "$ROOT/sdlc/project.ts" "$@" 2>/dev/null; }
+cfg() { node "$HARNESS/sdlc/project.ts" "$@" 2>/dev/null; }
 
 # --- degisiklik kumesi: taban dala gore commit edilmis fark -----------------
 BASE_BRANCH="${SDLC_BASE:-$(cat "$DIR/.base-branch" 2>/dev/null || echo main)}"
@@ -231,7 +232,7 @@ fi
 { echo "## Verdict"; echo; echo "**$STATUS** —${SUMMARY:- ölçüm yok}"; } >> "$OUT"
 
 node --input-type=module -e '
-  const { record } = await import("'"$ROOT"'/gates/journal.ts");
+  const { record } = await import("'"$HARNESS"'/gates/journal.ts");
   const s = process.argv[2];
   record({ gate: "test", ticket: process.argv[1], artifact: "docs/sdlc/"+process.argv[1]+"/TESTS.md",
            decision: s === "pass" ? "pass" : s === "env" ? "human" : "block",

@@ -834,6 +834,84 @@ else
 fi
 rm -rf "$MD"
 
+# --- Harness'ta proje adi gomulu kalmasin -------------------------------
+# "Her projeye tasinir" iddiasini zayiflatan en sessiz sey, bir yerde duran
+# eski urun adidir: compose dosyasinda sabit proje/konteyner adlari iki projenin
+# ayni makinede yan yana kosmasini engelliyordu (dis denetim, 22 Eyl 2026).
+# Aciklama satirlari serbest — orada gecmis anlatiliyor; olculen sey KOD.
+NAMELEAK="$(grep -rn 'crawlens' "$HARNESS/ops" "$HARNESS/sdlc" 2>/dev/null \
+            | grep -v '^\s*#' | grep -viE '^[^:]+:[0-9]+:\s*(#|//|\*)' || true)"
+if [ -z "$NAMELEAK" ]; then
+  printf '  ✓ %s\n' "harness yapılandırmasında gömülü proje adı yok"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "harness'ta gömülü proje adı var:"; FAIL=$((FAIL+1))
+  printf '%s\n' "$NAMELEAK" | head -3 | sed 's/^/      /'
+fi
+# Sabit container_name iki projenin yan yana kosmasini engeller.
+if grep -q 'container_name:' "$HARNESS/ops/cognee/compose.yml" 2>/dev/null; then
+  printf '  ✗ %s\n' "compose sabit container_name kullanıyor — iki proje çakışır"; FAIL=$((FAIL+1))
+else
+  printf '  ✓ %s\n' "compose konteyner adlarını projeden türetiyor"; PASS=$((PASS+1))
+fi
+
+# --- Tuketen repo: kurulumdan teslime butun komutlar ayakta mi ----------
+# Selftest'in geri kalani PROJE kokunde kosar ve harness ayni repodaymis gibi
+# davranan senaryolar kurar. Bu yuzden "harness dosyasini proje kokunde aramak"
+# sinifindaki hatalar YESIL testlerden kaciyordu: iki kok ayni dizin oldugunda
+# gorunmezler. Dis denetim tam bunu buldu (22 Eyl 2026) ve 100/100 gecen bir
+# suit onu kacirmisti.
+#
+# Bu senaryo GERCEK bir submodule kurar ve komutlari sirayla kosturur.
+# SDLC_SKIP_CONSUMER_SMOKE=1 ile atlanir (yavas ortamlar icin).
+if [ "${SDLC_SKIP_CONSUMER_SMOKE:-0}" = "1" ]; then
+  printf '  ~ %s\n' "tüketen repo duman testi atlandı (SDLC_SKIP_CONSUMER_SMOKE=1)"
+elif SMOKE_OUT="$(env -u SDLC_PROJECT_ROOT "$HARNESS/fixtures/consumer-smoke.sh" "$HARNESS" 2>&1)"; then
+  printf '  ✓ %s\n' "tüketen repoda kurulumdan teslime bütün komutlar ayakta"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "tüketen repoda komutlar kırık:"; FAIL=$((FAIL+1))
+  printf '%s\n' "$SMOKE_OUT" | grep -E '✗' | head -6 | sed 's/^/    /'
+fi
+
+# --- IKI KOK KARISMASIN --------------------------------------------------
+# Harness dosyasini PROJE kokunde aramak, ayni repoda calisirken gorunmez bir
+# hatadir: iki kok ayni dizindir. Submodule duzeninde ise her komut kirilir —
+# ornek projede approve.sh, olmayan <proje>/gates/journal.ts icin
+# ERR_MODULE_NOT_FOUND verdi (dis denetim, 22 Eyl 2026).
+# Kabuk VE gate'ler birlikte taranir: karisma ilk once gates/readiness.ts ve
+# gates/evaluate.ts icinde bulundu, yalnizca kabuk taransaydi kacacakti.
+MIX="$(grep -rn '\$ROOT/gates/\|\${ROOT}/gates/\|\$ROOT/scripts/sdlc/\|\${ROOT}/scripts/sdlc/' \
+        "$HARNESS/scripts/sdlc/" 2>/dev/null | grep -v '/selftest.sh:' || true)"
+# sdlc/ karisik bir dizin: project.ts ve roster.ts HARNESS kodu, project.json ve
+# fixtures/ PROJE verisi. Bu yuzden dizin degil DOSYA adlariyla bakilir.
+MIX="$MIX$(grep -rn '\$ROOT/sdlc/project\.ts\|\$ROOT/sdlc/roster\.ts\|\$ROOT/sdlc/validate\.ts\|\$ROOT/sdlc/orchestrator\.mjs' \
+        "$HARNESS/scripts/sdlc/" 2>/dev/null | grep -v '/selftest.sh:' || true)"
+MIX="$MIX$(grep -rn 'fromRoot("gates\|fromRoot("scripts/sdlc\|root}/gates\|root}/scripts/sdlc' \
+        "$HARNESS/gates/" "$HARNESS/sdlc/" 2>/dev/null || true)"
+if [ -z "$MIX" ]; then
+  printf '  ✓ %s\n' "hiçbir script harness dosyasını proje kökünde aramıyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "harness dosyası proje kökünde aranıyor (\$ROOT yerine \$HARNESS olmalı):"; FAIL=$((FAIL+1))
+  printf '%s\n' "$MIX" | sed 's/^/      /' | head -5
+fi
+# $HARNESS kullanan her script onu TANIMLAMALI.
+UNDEF=""
+for f in "$HARNESS"/scripts/sdlc/*.sh; do
+  grep -q '\$HARNESS' "$f" || continue
+  grep -q '^HARNESS=' "$f" || UNDEF="$UNDEF $(basename "$f")"
+done
+if [ -z "${UNDEF// /}" ]; then
+  printf '  ✓ %s\n' "\$HARNESS kullanan her script onu tanımlıyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "\$HARNESS tanımsız kullanılıyor:$UNDEF"; FAIL=$((FAIL+1))
+fi
+# Harness reposunda urun script'i durmamali.
+STRAY="$(ls "$HARNESS/scripts" 2>/dev/null | grep -v '^sdlc$' || true)"
+if [ -z "$STRAY" ]; then
+  printf '  ✓ %s\n' "harness'ta yalnızca hat script'leri var"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "harness'a ürün script'i sızmış: $(printf '%s' "$STRAY" | tr '\n' ' ')"; FAIL=$((FAIL+1))
+fi
+
 # --- Olc, dogrula, dondur ------------------------------------------------
 # Onbellek ucuzluk getirdi ama yeni bir risk yaratti: sinirda duran bir olcum
 # artik gunlerce DONUYOR. Yazi-tura bir kez atilip sonuc iki hafta servis

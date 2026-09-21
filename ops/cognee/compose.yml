@@ -24,12 +24,14 @@
 # "bos" gorunur, API "Unauthorized" der, hicbir sey bozulmamis oldugu halde
 # kurum hafizasi kaybolmus sanilir (olculdu 21 Eyl 2026 — uc ayri birim cifti
 # olusmustu). Makefile da ayni adi kullanir.
-name: crawlens-cognee
+# Proje adi disaridan gelir: iki proje ayni makinede yan yana kosabilmeli.
+# Makefile "-p $(SDLC_COMPOSE_PROJECT)" ile zaten geciyor; bu satir dogrudan
+# "docker compose -f" cagrilari icin makul bir varsayilan birakir.
+name: ${SDLC_COMPOSE_PROJECT:-sdlc-cognee}
 
 services:
   cognee-backend:
     image: cognee/cognee:main
-    container_name: cognee-backend
     restart: unless-stopped
     ports:
       # SADECE LOCALHOST. "8765:8000" yazimi 0.0.0.0 VE [::] uzerine baglar, yani
@@ -133,7 +135,6 @@ services:
     # Acmak icin: make cognee-full  (ya da --profile full)
     profiles: ["full"]
     image: cognee/cognee-mcp:main
-    container_name: cognee-mcp
     restart: unless-stopped
     ports:
       - "${COGNEE_BIND:-127.0.0.1}:${COGNEE_MCP_PORT:-8766}:8000"
@@ -159,7 +160,6 @@ services:
     # Acmak icin: make cognee-full  (ya da --profile full)
     profiles: ["full"]
     image: cognee/cognee-ui:${COGNEE_UI_TAG:-latest}
-    container_name: cognee-ui
     restart: unless-stopped
     ports:
       - "${COGNEE_BIND:-127.0.0.1}:${COGNEE_UI_PORT:-8767}:3000"

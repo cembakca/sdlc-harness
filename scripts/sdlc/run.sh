@@ -19,6 +19,7 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 TICKET="${1:?kullanim: run.sh <TICKET> [--spec-only]}"
 SPEC_ONLY="${2:-}"
 DIR="$ROOT/docs/sdlc/$TICKET"
@@ -28,7 +29,7 @@ need() { printf "   → %s\n" "$1"; }
 
 gate() { # gate <ad> <artifact>
   local out code
-  out="$(node "$ROOT/gates/evaluate.ts" "$1" "$2" 2>&1)"; code=$?
+  out="$(node "$HARNESS/gates/evaluate.ts" "$1" "$2" 2>&1)"; code=$?
   printf '%s\n' "$out" | node -e '
     let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
       try{const r=JSON.parse(s);console.log(`   ${r.decision.toUpperCase()} — ${r.reason}`)}
@@ -37,18 +38,18 @@ gate() { # gate <ad> <artifact>
 }
 
 say "ön koşullar"
-"$ROOT/scripts/sdlc/doctor.sh" "$TICKET" || { echo "doctor kritik eksik buldu — devam edilmiyor"; exit 20; }
+"$HARNESS/scripts/sdlc/doctor.sh" "$TICKET" || { echo "doctor kritik eksik buldu — devam edilmiyor"; exit 20; }
 [ -f "$DIR/intent.md" ] || { need "docs/sdlc/$TICKET/intent.md yok. Bu dosyayı İNSAN yazar: make sdlc-new TICKET=$TICKET"; exit 20; }
 
 say "hafıza"
-if "$ROOT/scripts/sdlc/memory.sh" status >/dev/null 2>&1; then
-  MEMORY_AS=analyst "$ROOT/scripts/sdlc/memory.sh" recall "$(head -30 "$DIR/intent.md" | tr '\n' ' ')" | head -20
+if "$HARNESS/scripts/sdlc/memory.sh" status >/dev/null 2>&1; then
+  MEMORY_AS=analyst "$HARNESS/scripts/sdlc/memory.sh" recall "$(head -30 "$DIR/intent.md" | tr '\n' ' ')" | head -20
 else
   echo "   cognee kapalı — hat hafızasız devam eder (make cognee-up)"
 fi
 
 say "kademe (analiz)"
-node "$ROOT/gates/route.ts" "$DIR/intent.md" | node -e '
+node "$HARNESS/gates/route.ts" "$DIR/intent.md" | node -e '
   let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);
   const a=r.assignment||{};console.log(`   ${r.tier} — ${r.reason}`);
   console.log(`   analist ${(a.analyst||{}).model} · mimar ${(a.architect||{}).model}`)})'
@@ -69,7 +70,7 @@ fi
 say "kapı: bölünme (scope)"
 gate scope "$DIR/spec.md"; case $? in
   20) need "Bu ticket birden cok bagimsiz isi paketliyor — bolup her parcayi kendi ticket'ina tasi"; exit 20;;
-  10) if "$ROOT/scripts/sdlc/approve.sh" --check "$TICKET" scope >/dev/null 2>&1; then
+  10) if "$HARNESS/scripts/sdlc/approve.sh" --check "$TICKET" scope >/dev/null 2>&1; then
         echo "   (insan onayi kayitli)"
       else
         need "Bolunme kapisi insan karari istiyor: scripts/sdlc/approve.sh $TICKET scope \"<neden bolmuyoruz>\""
@@ -90,7 +91,7 @@ else
   # komutun degil. Boyle yazildiginda basarisiz build sessizce review fazina
   # geciyordu (dis denetimde bulundu 21 Eyl 2026, kabukta dogrulandi).
   BUILD_EXIT=0
-  "$ROOT/scripts/sdlc/codex-build.sh" "$TICKET" || BUILD_EXIT=$?
+  "$HARNESS/scripts/sdlc/codex-build.sh" "$TICKET" || BUILD_EXIT=$?
   if [ "$BUILD_EXIT" -ne 0 ]; then
     # Build hatasini YOK SAYMA. Exit 10 = plan uygunlugu insan karari; 20 = ihlal.
     if [ "$BUILD_EXIT" -ge 20 ]; then
@@ -102,7 +103,7 @@ else
 fi
 
 say "kapı: plan uygunluğu (modelsiz)"
-node "$ROOT/gates/postbuild.ts" "$TICKET" | node -e '
+node "$HARNESS/gates/postbuild.ts" "$TICKET" | node -e '
   let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);
   console.log(`   ${r.decision.toUpperCase()} — ${r.changedFiles} dosya, ${r.testFilesTouched} test dosyası`);
   (r.problems||[]).forEach(p=>console.log("   ✗ "+p));
@@ -122,7 +123,7 @@ say "kapı: review"
 gate review "$DIR/REVIEW.md"; case $? in 20) exit 20;; 10) need "review kapısı insana düştü"; exit 10;; esac
 
 say "kararlar hafızaya"
-"$ROOT/scripts/sdlc/memory.sh" remember-decisions "$TICKET" 2>/dev/null || echo "   (hafıza kapalı, atlandı)"
+"$HARNESS/scripts/sdlc/memory.sh" remember-decisions "$TICKET" 2>/dev/null || echo "   (hafıza kapalı, atlandı)"
 
 say "sıradaki"
 need "test fazı (oturum, haiku) → UAT paketi (oturum, sonnet) → make sdlc-land TICKET=$TICKET"

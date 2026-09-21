@@ -16,6 +16,7 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 TICKET="${1:?kullanim: sync-github.sh <TICKET> [--pr]}"
 WITH_PR="${2:-}"
 DIR="$ROOT/docs/sdlc/$TICKET"
@@ -40,7 +41,7 @@ summary() {
   echo ""
   echo "## Kapılar"
   node --input-type=module -e '
-    const { read } = await import("'"$ROOT"'/gates/journal.ts");
+    const { read } = await import("'"$HARNESS"'/gates/journal.ts");
     const rows = read(process.argv[1]);
     const last = {};
     for (const r of rows) if (!r.gate.startsWith("approve:")) last[r.gate] = r;
@@ -59,7 +60,7 @@ summary() {
 # --- etiketler olcumlerden turer ---
 labels() {
   node --input-type=module -e '
-    const { read } = await import("'"$ROOT"'/gates/journal.ts");
+    const { read } = await import("'"$HARNESS"'/gates/journal.ts");
     const rows = read(process.argv[1]);
     const last = (g) => [...rows].reverse().find((r) => r.gate === g);
     const out = ["sdlc"];
@@ -100,7 +101,7 @@ AHEAD="$(git -C "$ROOT" rev-list --count "$BASE..$BRANCH" 2>/dev/null || echo 0)
 
 git -C "$ROOT" push -u origin "$BRANCH" >/dev/null 2>&1 || { echo "push basarisiz" >&2; exit 1; }
 
-READY="$(node "$ROOT/gates/readiness.ts" "$TICKET" 2>&1 || true)"
+READY="$(node "$HARNESS/gates/readiness.ts" "$TICKET" 2>&1 || true)"
 PR_BODY="$(printf '%s\n\n## Teslim hazırlığı\n\n```\n%s\n```\n\nKapatır #%s\n' "$BODY" "$READY" "${ISSUE:-}")"
 
 if gh pr view "$BRANCH" >/dev/null 2>&1; then

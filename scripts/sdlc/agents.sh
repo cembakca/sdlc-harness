@@ -18,13 +18,14 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 API="${COGNEE_API_URL:-http://localhost:8765}"
 STORE="${SDLC_AGENTS_ENV:-$ROOT/ops/cognee/agents.env}"
 mkdir -p "$(dirname "$STORE")" 2>/dev/null || true
 ADMIN_KEY="${COGNEE_API_KEY:-$(grep -m1 '^COGNEE_API_KEY=' "$ROOT/.env" 2>/dev/null | cut -d= -f2-)}"
 
 up() { curl -sf -m 10 -o /dev/null "$API/health" 2>/dev/null; }
-roles() { node "$ROOT/sdlc/roster.ts" | awk '{print $1}'; }
+roles() { node "$HARNESS/sdlc/roster.ts" | awk '{print $1}'; }
 
 case "${1:-sync}" in
   sync)

@@ -13,6 +13,7 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 FROM="${1:?kullanim: defer.sh <KAYNAK> <YENI> \"baslik\" \"neden\"}"
 NEW="${2:?yeni ticket kimligi}"
 TITLE="${3:?baslik}"
@@ -22,7 +23,7 @@ DST="$ROOT/docs/sdlc/$NEW"
 
 [ -d "$SRC" ] || { echo "kaynak ticket yok: $FROM" >&2; exit 1; }
 
-"$ROOT/scripts/sdlc/new.sh" "$NEW" "$TITLE" >/dev/null || exit 1
+"$HARNESS/scripts/sdlc/new.sh" "$NEW" "$TITLE" >/dev/null || exit 1
 
 cat > "$DST/intent.md" <<INTENT
 # Intent — $NEW: $TITLE
@@ -62,7 +63,7 @@ printf -- '- [%s](../%s/intent.md) — %s\n  - gerekçe: %s\n' "$NEW" "$NEW" "$T
 
 # Karar defterine de dus: ertelenme bir karardir
 node --input-type=module -e '
-  const { record } = await import("'"$ROOT"'/gates/journal.ts");
+  const { record } = await import("'"$HARNESS"'/gates/journal.ts");
   const [from, to, title, why] = process.argv.slice(1);
   record({ gate: "defer", ticket: from, artifact: `docs/sdlc/${to}/intent.md`,
            decision: "deferred", reason: `${title} → ${to}: ${why}` });

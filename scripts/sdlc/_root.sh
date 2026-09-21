@@ -40,9 +40,26 @@ sdlc_root() {
     d="$(dirname "$d")"
   done
 
-  # Yapilandirma yoksa git ust dizinine dus (init.sh ilk kosusu).
+  # Yapilandirma yoksa git ust dizinine dus (init.sh ilk kosusu). Ama bir
+  # HARNESS CHECKOUT'unu proje sanma: submodule'un kendi git deposu vardir ve
+  # icinden sorulan "git ust dizini" submodule'un kendisini dondurur. Iskelet o
+  # zaman tuketen projeye degil HARNESS'IN ICINE yazilir (dis denetim,
+  # 22 Eyl 2026 — README'nin onerdigi kisa yol tam bunu yapiyordu).
   local top
   if top="$(git -C "$here" rev-parse --show-toplevel 2>/dev/null)" && [ -n "$top" ]; then
+    if sdlc_is_harness "$top"; then
+      # Harness'in ustunde bir proje var mi (submodule duzeni)?
+      local up
+      up="$(dirname "$top")"
+      if [ -f "$up/sdlc/project.json" ]; then printf '%s\n' "$up"; return 0; fi
+      if top2="$(git -C "$up" rev-parse --show-toplevel 2>/dev/null)" && [ -n "$top2" ] \
+         && ! sdlc_is_harness "$top2"; then
+        printf '%s\n' "$top2"; return 0
+      fi
+      # Sarmalayan bir proje yoksa burasi harness'in KENDI deposudur ve
+      # komutlar (sir taramasi, selftest, kalibrasyon) orada kosmalidir.
+      # Yalnizca iskelet URETMEK yanlis olur; o reddi init.sh verir.
+    fi
     printf '%s\n' "$top"
     return 0
   fi
@@ -50,6 +67,11 @@ sdlc_root() {
   echo "proje koku bulunamadi: sdlc/project.json yok ve git deposu degil" >&2
   echo "  acikca soylemek icin: SDLC_PROJECT_ROOT=/yol/proje" >&2
   return 1
+}
+
+# Bir dizin harness checkout'u mu: araclar var, proje yapilandirmasi yok.
+sdlc_is_harness() {
+  [ -d "$1/gates" ] && [ -d "$1/scripts/sdlc" ] && [ ! -f "$1/sdlc/project.json" ]
 }
 
 # Harness'in KENDI koku — proje kokunden farkli olabilir.

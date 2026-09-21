@@ -17,6 +17,7 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 TICKET="${1:?kullanim: review-scope.sh <TICKET>}"
 DIR="$ROOT/docs/sdlc/$TICKET"
 WT="${SDLC_WORKTREE:-$ROOT/.sdlc-worktrees/$TICKET}"
@@ -38,7 +39,7 @@ FULL_DIFF="git -C $WT diff $BASE...HEAD   (ayrica commit edilmemis icin: git -C 
 
 HEAD_NOW="$(git -C "$WT" rev-parse HEAD 2>/dev/null | cut -c1-12)"
 LAST="$(node --input-type=module -e '
-  const { read } = await import("'"$ROOT"'/gates/journal.ts");
+  const { read } = await import("'"$HARNESS"'/gates/journal.ts");
   const rows = read(process.argv[1]).filter((r) => r.gate === "review");
   const last = [...rows].reverse().find((r) => r.measures && r.measures.headSha);
   console.log(last ? String(last.measures.headSha) : "");

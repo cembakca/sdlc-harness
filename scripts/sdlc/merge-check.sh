@@ -15,6 +15,7 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 TICKET="${1:?kullanim: merge-check.sh <TICKET>}"
 DIR="$ROOT/docs/sdlc/$TICKET"
 WT="${SDLC_WORKTREE:-$ROOT/.sdlc-worktrees/$TICKET}"
@@ -22,10 +23,10 @@ BRANCH="sdlc/$TICKET"
 BASE="${SDLC_BASE:-$(cat "$DIR/.base-branch" 2>/dev/null || git -C "$ROOT" rev-parse --abbrev-ref HEAD)}"
 
 [ -d "$WT" ] || { echo "worktree yok: $WT" >&2; exit 20; }
-bash "$ROOT/scripts/sdlc/worktree-clean.sh" "$TICKET" >/dev/null || exit 20
+bash "$HARNESS/scripts/sdlc/worktree-clean.sh" "$TICKET" >/dev/null || exit 20
 
 note() { node -e '
-  const { record } = await import("'"$ROOT"'/gates/journal.ts");
+  const { record } = await import("'"$HARNESS"'/gates/journal.ts");
   const [ticket, decision, reason] = process.argv.slice(1);
   record({ gate: "merge", ticket, artifact: "'"$BRANCH"'", decision, reason,
            measures: { headSha: process.argv[4] || "", baseSha: process.argv[5] || "", base: "'"$BASE"'" } });
@@ -93,7 +94,7 @@ if [ -n "${CONFLICTS// /}" ]; then
 fi
 
 echo "temiz birleşti ($BEHIND commit alındı) — şimdi BİRLEŞMİŞ hâlde testler"
-if "$ROOT/scripts/sdlc/test.sh" "$TICKET" >/tmp/sdlc-merge-tests.log 2>&1; then
+if "$HARNESS/scripts/sdlc/test.sh" "$TICKET" >/tmp/sdlc-merge-tests.log 2>&1; then
   echo "birleşmiş hâlde testler yeşil"
   tail -3 /tmp/sdlc-merge-tests.log
   note pass "$BASE ile temiz birlesti, birlesmis halde testler yesil"

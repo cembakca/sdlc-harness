@@ -41,8 +41,16 @@ export function projectRoot(): string {
     d = up;
   }
 
-  // Yapılandırma yok (init.sh ilk koşusu): eski davranışa düş.
-  cached = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  // Yapılandırma yok. Harness submodule olarak bağlıysa bir ÜSTTE proje
+  // olabilir: `<proje>/sdlc-harness/gates` → `<proje>`. Buna bakmadan harness
+  // kökünü döndürmek, tüketen repoda her şeyi yanlış dizine yöneltir.
+  const own = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const up = dirname(own);
+  if (existsSync(resolve(up, ".git")) || existsSync(resolve(up, "sdlc/project.json"))) {
+    cached = up;
+    return cached;
+  }
+  cached = own;
   return cached;
 }
 

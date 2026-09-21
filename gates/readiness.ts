@@ -17,7 +17,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { read, record, verify } from "./journal.ts";
-import { fromRoot, projectRoot } from "./root.ts";
+import { fromRoot, harnessRoot, projectRoot } from "./root.ts";
+import { resolve } from "node:path";
 
 const ticket = process.argv[2];
 if (!ticket) {
@@ -141,8 +142,11 @@ for (const gate of ["spec", "scope", "blast", "review"]) {
 let currentHead = "";
 const wtDir = `${root}/.sdlc-worktrees/${ticket}`;
 let headSource = "yok";
+// stdio: stderr YUTULUR. Worktree henuz yokken git "fatal: cannot change to
+// ..." basiyordu; kapi bunu zaten yakaliyor ama satir, hicbir seyin bozulmadigi
+// bir kosuda bozulmus gibi gorunuyordu (tuketen repo duman testi, 22 Eyl 2026).
 const gitIn = (d: string, ...args: string[]) =>
-  execFileSync("git", ["-C", d, ...args], { encoding: "utf8" }).trim();
+  execFileSync("git", ["-C", d, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 const short = (sha: string) => sha.trim().slice(0, 12);
 
 try {
@@ -182,7 +186,7 @@ add(
 );
 if (headSource === "worktree") {
   try {
-    execFileSync("bash", [`${root}/scripts/sdlc/worktree-clean.sh`, ticket], { stdio: "ignore" });
+    execFileSync("bash", [resolve(harnessRoot(), "scripts/sdlc/worktree-clean.sh"), ticket], { stdio: "ignore" });
     add("iş ağacı", true, "kod değişiklikleri commit edilmiş");
   } catch {
     add("iş ağacı", false, "commit edilmemiş kod var veya ticket dalı yanlış");
@@ -318,7 +322,7 @@ add(
 // Bu satir TESLIMI DURDURMAZ — hangi modelin "dogru" oldugu bir yargi, kapinin
 // isi degil. Ama sessiz de kalmaz: uyusmazlik ve eksik kayit GORUNUR.
 try {
-  const assignOut = execFileSync("node", [`${root}/gates/assign.ts`, ticket], {
+  const assignOut = execFileSync("node", [resolve(harnessRoot(), "gates/assign.ts"), ticket], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   });

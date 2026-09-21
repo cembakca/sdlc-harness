@@ -9,7 +9,12 @@
 set -euo pipefail
 
 TICKET="${1:?usage: codex-build.sh <TICKET>}"
-ROOT="$(git rev-parse --show-toplevel)"
+# Kok kesfi TEK NOKTADAN: "git rev-parse" calisma dizinine bagliydi ve harness
+# submodule'e cikinca submodule'un kendi deposunu dondurebiliyordu.
+_SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$_SDLC_CALLER_DIR/_root.sh"
+ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 DIR="$ROOT/docs/sdlc/$TICKET"
 WT="${SDLC_WORKTREE_ROOT:-$ROOT/.sdlc-worktrees}/$TICKET"
 BRANCH="sdlc/$TICKET"
@@ -60,7 +65,7 @@ link_dep() {
   ln -s "$ROOT/$1" "$WT/$1" 2>/dev/null || true
 }
 # Bagimliliklar yapilandirmadan: her yigin kendi deps listesini soyler.
-cfg() { node "$ROOT/sdlc/project.ts" "$@" 2>/dev/null; }
+cfg() { node "$HARNESS/sdlc/project.ts" "$@" 2>/dev/null; }
 for st in $(cfg stacks | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{JSON.parse(s).forEach(x=>console.log(x.name))}catch{}})'); do
   SROOT="$(cfg stack "$st" root)"
   for dep in $(cfg stack "$st" deps | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log((JSON.parse(s)||[]).join(" "))}catch{}})'); do
@@ -277,7 +282,7 @@ trap 'cleanup_services' EXIT
 # (mechanical | standard | deep), kademe sdlc/roster.json'dan role cevrilir.
 # Her isi yuksek eforda kosturmak da, her isi ucuz modelde kosturmak da
 # ayni hata — isin zorlugunu olcmemek. TEK cagri, uc deger.
-eval "$(node "$ROOT/gates/assign.ts" "$TICKET" 2>/dev/null | node -e '
+eval "$(node "$HARNESS/gates/assign.ts" "$TICKET" 2>/dev/null | node -e '
 let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
   let r={}; try{ r=JSON.parse(s) }catch{}
   const a=(r.assignment||{}).implementer||{};
@@ -289,8 +294,8 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
 # Olcum basarisizsa kadronun standart kademesine dus (sessizce en ucuza degil).
 MODEL="${SDLC_CODEX_MODEL:-$MODEL}"
 EFFORT="${SDLC_CODEX_EFFORT:-$EFFORT}"
-[ -n "${MODEL:-}" ]  || MODEL="$(node "$ROOT/sdlc/roster.ts" implementer model)"
-[ -n "${EFFORT:-}" ] || EFFORT="$(node "$ROOT/sdlc/roster.ts" implementer effort)"
+[ -n "${MODEL:-}" ]  || MODEL="$(node "$HARNESS/sdlc/roster.ts" implementer model)"
+[ -n "${EFFORT:-}" ] || EFFORT="$(node "$HARNESS/sdlc/roster.ts" implementer effort)"
 echo "--- kademe: ${TIER:-bilinmiyor} → model $MODEL, efor $EFFORT" >&2
 
 NET_ARGS=()
@@ -316,14 +321,14 @@ finish finished "$?"
 # Burada durdurmuyor — build'in kendisi basarili olabilir — ama GORUNUYOR.
 # Hangi modelde kostugu DEFTERE girer: atanan kademe ile kosani karsilastirmak
 # ancak boyle mumkun (gates/readiness.ts "kademe uyumu" satiri).
-"$ROOT/scripts/sdlc/ran.sh" "$TICKET" implementer "$MODEL" "$EFFORT" || true
+"$HARNESS/scripts/sdlc/ran.sh" "$TICKET" implementer "$MODEL" "$EFFORT" || true
 
 echo "--- commit disiplini (bir plan gorevi = bir commit)"
-"$ROOT/scripts/sdlc/commit-lint.sh" "$TICKET" || echo "   ^ CI bunu ZORUNLU tutuyor; birlestirmeden once duzelt"
+"$HARNESS/scripts/sdlc/commit-lint.sh" "$TICKET" || echo "   ^ CI bunu ZORUNLU tutuyor; birlestirmeden once duzelt"
 
 echo "--- plan uygunluk denetimi (model yok, deterministik)"
 POSTBUILD_EXIT=0
-node "$ROOT/gates/postbuild.ts" "$TICKET" || POSTBUILD_EXIT=$?
+node "$HARNESS/gates/postbuild.ts" "$TICKET" || POSTBUILD_EXIT=$?
 
 # CHECKPOINT COMMIT: her build turu ticket dalinda bir commit birakir.
 # Sebebi olculdu (21 Eyl 2026): review deltasi iki commit arasindaki farktan

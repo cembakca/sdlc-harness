@@ -6,10 +6,24 @@ Projeden bağımsızdır — projeye özgü her şey tüketen repodaki
 
 ## Bağlama (submodule)
 
+**Önerilen yol** — harness reposundan, hedefi göstererek. Submodule'ü bağlar,
+sembolik bağları kurar, CI'yi kopyalar, iskeleti üretir ve kurulumu doğrular:
+
 ```bash
-git submodule add git@github.com:<kullanici>/sdlc-harness.git sdlc-harness
-sdlc-harness/scripts/sdlc/init.sh        # sdlc/project.json iskeletini üretir
+scripts/sdlc/init.sh --target /yol/projem
 ```
+
+Zaten bağlıysa, **proje kökünden** iskeleti üretmek için:
+
+```bash
+cd /yol/projem
+sdlc-harness/scripts/sdlc/init.sh
+```
+
+> Bu komutu harness'ın kendi deposunda çalıştırmak reddedilir. Submodule'ün
+> kendi git deposu vardır; içinden sorulan "git üst dizini" submodule'ün
+> kendisini döndürür ve yapılandırma tüketen projeye değil harness'ın içine
+> düşerdi. Kök keşfi artık bunu tanıyor, `init.sh` de sesli reddediyor.
 
 Projenin `Makefile`'ına üç satır ve bir include:
 
@@ -27,8 +41,13 @@ CI: `sdlc/ci.yml` dosyasını `.github/workflows/` altına kopyalayın —
 
 | | nerede | ne var |
 |---|---|---|
-| proje kökü | `<proje>/` | `sdlc/project.json`, `docs/sdlc/<ticket>/` |
-| harness kökü | `<proje>/sdlc-harness/` | `gates/`, `scripts/sdlc/`, `sdlc/` |
+| proje kökü | `<proje>/` | `sdlc/project.json`, `sdlc/fixtures/`, `docs/sdlc/<ticket>/`, `.sdlc-worktrees/` |
+| harness kökü | `<proje>/sdlc-harness/` | `gates/`, `scripts/sdlc/`, `sdlc/project.ts`, `sdlc/roster.ts` |
+
+`sdlc/` karışık bir dizindir: `project.ts` ve `roster.ts` **harness kodudur**,
+`project.json` ve `fixtures/` **proje verisidir**. Bu yüzden script'ler dizine
+değil dosya adına bakar — ve selftest, harness kodunu proje kökünde arayan her
+satırı yakalar.
 
 Aynı repoda ikisi aynı dizindir; ayrıldığında değildir. Keşif açıktır:
 `SDLC_PROJECT_ROOT` → yukarı yürüyüp `sdlc/project.json` → git üst dizini →
@@ -50,13 +69,36 @@ hiçbir yolu eşleştirmeyen `changedPattern`, var olmayan yığın dizini, watc
 modunda açılan test komutu, derlenmeyen düzenli ifade, hafızaya verilmiş bir
 sır yolu. Bozuk JSON artık varsayılanlara düşmez — sesli düşer.
 
+## CI istisna politikası
+
+Bilet belgesi (`docs/sdlc/<TICKET>/`) olmayan bir değişiklikte **commit
+disiplini ve teslim hazırlığı atlanır**. Bu bilinçli bir istisnadır — her yazım
+hatası düzeltmesi spec/plan/UAT üretmek zorunda değil. Ama istisna sessiz
+değildir: iş özetine "OFİS DIŞINDA", sebebi, atlananlar ve koşanlar yazılır.
+
+İstisnayı kapatmak isteyen proje:
+
+```json
+{ "ci": { "requireTicket": true } }
+```
+
+O zaman bilet belgesi olmayan PR düşer.
+
 ## Kendini sınama
 
 ```bash
 ./scripts/sdlc/selftest.sh   # tüketen repo içinde
 make selftest                # harness reposunda (örnek proje üretilir)
 make selftest-shapes         # aynı suit üç proje biçimi üzerinde
+fixtures/consumer-smoke.sh . # GERÇEK submodule: kurulumdan teslime
 ```
+
+`consumer-smoke.sh` ayrı durur çünkü selftest'in geri kalanı **proje kökünde**
+koşar ve harness aynı repodaymış gibi davranan senaryolar kurar. İki kök aynı
+dizin olduğunda "harness dosyasını proje kökünde aramak" sınıfındaki hatalar
+görünmez — 100/100 geçen bir suit tam bunu kaçırdı. Bu senaryo gerçek bir
+submodule kurup komutları sırayla koşturur; model çağrısı yoktur, ölçülen şey
+kararlar değil **komutların ayakta olup olmadığı**.
 
 `fixtures/make-project.sh [tek|coklu|monorepo]` örnek projeyi üretir:
 tek yığın, iki yığın (`envFiles` + typecheck), iç içe monorepo. Biçimler farklı

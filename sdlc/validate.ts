@@ -220,6 +220,14 @@ export function validate(rawText: string, root: string): Problem[] {
     }
   }
 
+  // --- CI istisna politikası ----------------------------------------------
+  if (cfg.ci !== undefined) {
+    if (typeof cfg.ci !== "object" || cfg.ci === null) add("error", "ci", "nesne olmalı");
+    else if (cfg.ci.requireTicket !== undefined && typeof cfg.ci.requireTicket !== "boolean") {
+      add("error", "ci.requireTicket", "true/false olmalı");
+    }
+  }
+
   // --- projenin kendi kalibrasyon vakaları ---------------------------------
   // Eksik bir fixture ölçülmeyen bir vakadır: kapı o durumda hiç sınanmaz ama
   // rapor "22 vakanın 22'si tuttu" der. Eskiden bu ancak ÜCRETLİ bir koşuda

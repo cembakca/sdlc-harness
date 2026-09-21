@@ -5,9 +5,31 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { orchestrate } from "../../sdlc/orchestrator.mjs";
+import { projectRoot } from "../../gates/root.ts";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+// IKI KOK. Harness ayri repoya cikinca bunlar ayni dizin degil:
+//   proje koku   : git, docs/sdlc/<ticket>, .sdlc-worktrees — is BURADA yapilir
+//   harness koku : gates/, scripts/sdlc/, .claude/workflows — arac BURADA durur
+// Onceden ikisi de "../.." idi; tuketen bir repoda orkestratör calisma dizinini
+// harness'a tasiyor ve biletin belgelerini orada ariyordu (dis denetim,
+// 22 Eyl 2026).
+const HARNESS = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const root = projectRoot();
 process.chdir(root);
+// Akis (sdlc.js) harness dosyalarini bu degiskenle bulur.
+process.env.SDLC_HARNESS = HARNESS;
+
+/**
+ * Harness'a ait goreli yolu mutlaklastirir.
+ *
+ * Akis `scripts/sdlc/test.sh` ya da `node gates/assign.ts` diye yazar; bunlar
+ * ARACIN yollari, projenin degil. Calisma dizini proje koku oldugu icin
+ * goreli birakilirsa projede aranir ve bulunamaz.
+ */
+const HARNESS_PREFIX = /^(gates|scripts\/sdlc)\//;
+function harnessPath(p) {
+  return typeof p === "string" && HARNESS_PREFIX.test(p) ? resolve(HARNESS, p) : p;
+}
 
 const argv = process.argv.slice(2);
 const ticket = argv.shift();
@@ -69,8 +91,10 @@ function writeArtifact(path, content) {
 }
 
 function command(file, args = [], allowed = [0]) {
+  const exe = harnessPath(file);
+  const argv = args.map(harnessPath);
   return new Promise((resolve, reject) => {
-    const child = spawn(file, args, {
+    const child = spawn(exe, argv, {
       cwd: root,
       env: { ...process.env, MEMORY_AUTOSTART: process.env.MEMORY_AUTOSTART ?? "0" },
       stdio: ["ignore", "pipe", "pipe"],

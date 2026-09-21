@@ -12,15 +12,16 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 TICKET="${1:?kullanim: land.sh <TICKET>}"
 DIR="$ROOT/docs/sdlc/$TICKET"
 WT="$ROOT/.sdlc-worktrees/$TICKET"
 BRANCH="sdlc/$TICKET"
 BASE="$(cat "$DIR/.base-branch" 2>/dev/null || echo main)"
-bash "$ROOT/scripts/sdlc/worktree-clean.sh" "$TICKET" >/dev/null || exit 20
+bash "$HARNESS/scripts/sdlc/worktree-clean.sh" "$TICKET" >/dev/null || exit 20
 
 echo "== teslim kapisi"
-if ! node "$ROOT/gates/readiness.ts" "$TICKET"; then
+if ! node "$HARNESS/gates/readiness.ts" "$TICKET"; then
   echo ""
   echo "Kapi gecilmedi — tasima yapilmadi. Yukaridaki engelleri kapat."
   exit 20
@@ -69,7 +70,7 @@ undo_docs() {
 echo ""
 echo "== birlestiriliyor: $BRANCH → $BASE"
 APPROVALS="$(node --input-type=module -e '
-  const { read } = await import("'"$ROOT"'/gates/journal.ts");
+  const { read } = await import("'"$HARNESS"'/gates/journal.ts");
   const rows = read(process.argv[1]).filter((r) => r.gate.startsWith("approve:"));
   for (const a of rows) console.log(`Approved-${a.gate.replace("approve:", "")}: ${a.reason}`);
 ' "$TICKET" 2>/dev/null || true)"
@@ -87,7 +88,7 @@ MSG
 )" || { echo "birlestirme basarisiz" >&2; undo_docs; exit 20; }
 
 node --input-type=module -e '
-  const { record } = await import("'"$ROOT"'/gates/journal.ts");
+  const { record } = await import("'"$HARNESS"'/gates/journal.ts");
   record({ gate: "land", ticket: process.argv[1], artifact: process.argv[2],
            decision: "landed", reason: `${process.argv[3]} dalina birlestirildi` });
 ' "$TICKET" "$BRANCH" "$BASE" || {

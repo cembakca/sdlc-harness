@@ -15,6 +15,7 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 TICKET="${1:?kullanim: measure.sh <TICKET> <asama>}"
 STAGE="${2:?asama: plan-stage | build-stage | review-stage}"
 DIR="$ROOT/docs/sdlc/$TICKET"
@@ -31,16 +32,16 @@ run_json() {
 
 case "$STAGE" in
   plan-stage)
-    SPEC="$(run_json node "$ROOT/gates/evaluate.ts" spec "$DIR/spec.md")"
-    SCOPE="$(run_json node "$ROOT/gates/evaluate.ts" scope "$DIR/spec.md")"
-    BLAST="$(run_json node "$ROOT/gates/evaluate.ts" blast "$DIR/plan.md")"
-    ASSIGN="$(run_json node "$ROOT/gates/assign.ts" "$TICKET")"
+    SPEC="$(run_json node "$HARNESS/gates/evaluate.ts" spec "$DIR/spec.md")"
+    SCOPE="$(run_json node "$HARNESS/gates/evaluate.ts" scope "$DIR/spec.md")"
+    BLAST="$(run_json node "$HARNESS/gates/evaluate.ts" blast "$DIR/plan.md")"
+    ASSIGN="$(run_json node "$HARNESS/gates/assign.ts" "$TICKET")"
     [ -n "$SPEC" ]   || SPEC='{"decision":"block","reason":"spec olculemedi"}'
     [ -n "$SCOPE" ]  || SCOPE='{"decision":"block","reason":"scope olculemedi"}'
     [ -n "$BLAST" ]  || BLAST='{"decision":"unknown","reason":"plan yok"}'
     [ -n "$ASSIGN" ] || ASSIGN='{}' 
-    OK_SCOPE="$("$ROOT/scripts/sdlc/approve.sh" --check "$TICKET" scope 2>/dev/null || true)"
-    OK_BLAST="$("$ROOT/scripts/sdlc/approve.sh" --check "$TICKET" blast 2>/dev/null || true)"
+    OK_SCOPE="$("$HARNESS/scripts/sdlc/approve.sh" --check "$TICKET" scope 2>/dev/null || true)"
+    OK_BLAST="$("$HARNESS/scripts/sdlc/approve.sh" --check "$TICKET" blast 2>/dev/null || true)"
     node --input-type=module -e '
       const [spec, scope, blast, assign, okScope, okBlast] = process.argv.slice(1);
       const j = (s) => { try { return JSON.parse(s) } catch { return { decision: "unknown", raw: String(s).slice(0,200) } } };
@@ -53,10 +54,10 @@ case "$STAGE" in
     ;;
 
   build-stage)
-    PB="$(run_json node "$ROOT/gates/postbuild.ts" "$TICKET")"
+    PB="$(run_json node "$HARNESS/gates/postbuild.ts" "$TICKET")"
     [ -n "$PB" ] || PB='{"decision":"block","problems":["postbuild kosmadi"]}' 
-    LINT="$("$ROOT/scripts/sdlc/commit-lint.sh" "$TICKET" 2>&1 || true)"
-    ASSIGN="$(run_json node "$ROOT/gates/assign.ts" "$TICKET")"
+    LINT="$("$HARNESS/scripts/sdlc/commit-lint.sh" "$TICKET" 2>&1 || true)"
+    ASSIGN="$(run_json node "$HARNESS/gates/assign.ts" "$TICKET")"
     [ -n "$ASSIGN" ] || ASSIGN='{}'
     node --input-type=module -e '
       const [pb, lint, assign] = process.argv.slice(1);
@@ -70,12 +71,12 @@ case "$STAGE" in
     ;;
 
   review-stage)
-    SCOPE_TXT="$("$ROOT/scripts/sdlc/review-scope.sh" "$TICKET" 2>/dev/null || echo FULL)"
+    SCOPE_TXT="$("$HARNESS/scripts/sdlc/review-scope.sh" "$TICKET" 2>/dev/null || echo FULL)"
     LADDER="$(node --input-type=module -e '
-      const m = await import("'"$ROOT"'/gates/questions.ts");
+      const m = await import("'"$HARNESS"'/gates/questions.ts");
       console.log(m.reviewSeverityLadder());
     ' 2>/dev/null || true)"
-    ASSIGN="$(run_json node "$ROOT/gates/assign.ts" "$TICKET")"
+    ASSIGN="$(run_json node "$HARNESS/gates/assign.ts" "$TICKET")"
     [ -n "$ASSIGN" ] || ASSIGN='{}'
     node --input-type=module -e '
       const [scope, ladder, assign] = process.argv.slice(1);

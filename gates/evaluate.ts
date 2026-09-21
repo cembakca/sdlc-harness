@@ -16,6 +16,11 @@ import { createHash } from "node:crypto";
 import { GATES, type GateName } from "./questions.ts";
 import { ask, isOffline } from "./jev.ts";
 import { record, ticketOf } from "./journal.ts";
+import { fromRoot, harnessRoot } from "./root.ts";
+import { resolve } from "node:path";
+
+/** Harness'a ait dosya: proje kokunde DEGIL harness kokunde aranir. */
+const harnessPath = (p: string) => resolve(harnessRoot(), p);
 
 const [, , gateName, artifactPath] = process.argv;
 
@@ -49,7 +54,7 @@ if (gate.wantsProjectContext) {
   try {
     const summary = state.split("\n").slice(0, 40).join(" ").slice(0, 600);
     const recalled = execFileSync(
-      fromRoot("scripts/sdlc/memory.sh"),
+      harnessPath("scripts/sdlc/memory.sh"),
       ["recall-project", summary],
       { encoding: "utf8", timeout: 120_000 }
     ).trim();

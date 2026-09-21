@@ -35,7 +35,7 @@ sessizce yanlış okumaz.
 `testSelector`, `failureFilePattern`, `infraFailurePatterns`),
 `criticalSurfaces[]`, `criticalPaths[]`, `memory`
 (`processDataset`, `productDataset`, `productDocs`), `secrets.allowPaths`,
-`calibration.cases[]`.
+`calibration.cases[]`, `ci.requireTicket`.
 
 `calibration.cases[]` yeni: projenin **gerçek** artifact'leriyle beslenen
 kalibrasyon vakaları burada tanımlanır, dosyalar `sdlc/fixtures/` altında.

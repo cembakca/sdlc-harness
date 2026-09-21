@@ -17,6 +17,7 @@ set -euo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 API="${COGNEE_API_URL:-http://localhost:8765}"
 # Kimlik dogrulama acik (arayuz giris ekrani istiyor). Script'ler API anahtariyla
 # konusur; anahtar .env'den okunur, Authorization degil X-Api-Key basligiyla
@@ -28,11 +29,11 @@ fi
 # Hafizaya "birisi yazdi" degil "mimar yazdi" kaydi dussun diye.
 ACTIVE_KEY="${COGNEE_API_KEY:-}"
 if [ -n "${MEMORY_AS:-}" ]; then
-  ROLE_KEY="$("$ROOT/scripts/sdlc/agents.sh" key "$MEMORY_AS" 2>/dev/null)"
+  ROLE_KEY="$("$HARNESS/scripts/sdlc/agents.sh" key "$MEMORY_AS" 2>/dev/null)"
   [ -n "$ROLE_KEY" ] && ACTIVE_KEY="$ROLE_KEY"
 fi
 AUTH=(); [ -n "$ACTIVE_KEY" ] && AUTH=(-H "X-Api-Key: ${ACTIVE_KEY}")
-cfgp() { node "$ROOT/sdlc/project.ts" "$@" 2>/dev/null; }
+cfgp() { node "$HARNESS/sdlc/project.ts" "$@" 2>/dev/null; }
 PROC_DS="$(cfgp memory | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).processDataset||"sdlc")}catch{console.log("sdlc")}})')"
 DATASET_DEFAULT="${COGNEE_DATASET:-$PROC_DS}"
 CMD="${1:-status}"
@@ -199,7 +200,7 @@ case "$CMD" in
       rm -f "$RESP_FILE"
       echo "recall BASARISIZ: hafiza ${MEMORY_TIMEOUT:-180}s icinde yanit vermedi." >&2
       echo "  Bu 'emsal yok' DEMEK DEGILDIR — soru sorulamadi." >&2
-      echo "  Bak: docker logs --tail 30 cognee-backend   (sik sebep: saglayici kotasi/anahtari)" >&2
+      echo "  Bak: docker compose -p ${SDLC_COMPOSE_PROJECT:-sdlc-cognee} logs --tail 30 cognee-backend   (sik sebep: saglayici kotasi/anahtari)" >&2
       exit 14
     fi
     if [ "${HTTP:-0}" -ge 400 ] 2>/dev/null; then
@@ -247,7 +248,7 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
     TICKET="${2:?usage: memory.sh remember-decisions <TICKET>}"
     require_up
     TMP="$(mktemp -t decisions).md"
-    node "$ROOT/gates/history.ts" "$TICKET" > "$TMP"
+    node "$HARNESS/gates/history.ts" "$TICKET" > "$TMP"
     if MEMORY_AS="${MEMORY_AS:-gatekeeper}" "$0" remember "$TMP" >/dev/null; then
       echo "kararlar hafizaya alindi: $TICKET"
     else
@@ -388,7 +389,7 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
     echo "1/3 yaziliyor (dataset: $VDS)"
     if ! MEMORY_SYNC=1 COGNEE_DATASET="$VDS" "$0" remember "$TMPV" "$VDS" >/dev/null 2>&1; then
       rm -f "$TMPV"; echo "HAFIZA DOGRULANAMADI: yazma basarisiz." >&2
-      echo "  bak: docker logs --tail 30 cognee-backend" >&2; exit 15
+      echo "  bak: docker compose -p ${SDLC_COMPOSE_PROJECT:-sdlc-cognee} logs --tail 30 cognee-backend" >&2; exit 15
     fi
     rm -f "$TMPV"
     echo "2/3 graf kuruluyor"
@@ -413,7 +414,7 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
     else
       echo "HAFIZA DOGRULANAMADI: belge yazildi ama GERI OKUNAMADI." >&2
       echo "  Bu 'emsal yok' degil, hafiza calismiyor demektir." >&2
-      echo "  bak: docker logs --tail 30 cognee-backend (sik sebep: saglayici kotasi/anahtari)" >&2
+      echo "  bak: docker compose -p ${SDLC_COMPOSE_PROJECT:-sdlc-cognee} logs --tail 30 cognee-backend (sik sebep: saglayici kotasi/anahtari)" >&2
       exit 16
     fi
     ;;

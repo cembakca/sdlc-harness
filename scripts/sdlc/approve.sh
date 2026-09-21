@@ -17,11 +17,12 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 
 if [ "${1:-}" = "--check" ]; then
   TICKET="${2:?}"; GATE="${3:?}"
   node --input-type=module -e '
-    const { read, verify } = await import("'"$ROOT"'/gates/journal.ts");
+    const { read, verify } = await import("'"$HARNESS"'/gates/journal.ts");
     const [ticket, gate] = process.argv.slice(1);
     const verdict = verify(ticket);
     if (!verdict.ok) {
@@ -64,7 +65,7 @@ read -r CONFIRM
 [ "$CONFIRM" = "EVET" ] || { echo "onay kaydedilmedi" >&2; exit 2; }
 
 node --input-type=module -e '
-  const { record, read, verify } = await import("'"$ROOT"'/gates/journal.ts");
+  const { record, read, verify } = await import("'"$HARNESS"'/gates/journal.ts");
   const [ticket, gate, reason, who] = process.argv.slice(1);
   const verdict = verify(ticket);
   if (!verdict.ok) {

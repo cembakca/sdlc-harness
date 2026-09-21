@@ -42,7 +42,10 @@ if [ -n "$TARGET" ]; then
   # bunun yerine bir SURUM isaret eder: guncellemek acik bir hareket olur
   # (git submodule update --remote) ve hangi surumde oldugu commit'te yazar.
   SUB="${SDLC_SUBMODULE_PATH:-sdlc-harness}"
-  ORIGIN="$(git -C "$HARNESS" remote get-url origin 2>/dev/null)"
+  # SDLC_HARNESS_ORIGIN: yayinlanmis surum yerine baska bir kaynaktan bagla.
+  # Ayna/fork icin; ayrica duman testi bunu yerel klona yoneltir, aksi halde
+  # calisma agacini degil YAYINLANMIS surumu sinardi (22 Eyl 2026).
+  ORIGIN="${SDLC_HARNESS_ORIGIN:-$(git -C "$HARNESS" remote get-url origin 2>/dev/null)}"
   if [ -z "$ORIGIN" ]; then
     echo "harness reposunun 'origin' uzak adresi yok — once yayinlayin" >&2
     exit 1
@@ -111,6 +114,21 @@ if [ -n "$TARGET" ]; then
   echo "       include \$(SDLC)sdlc.mk"
   echo "  4. hafiza opsiyonel; MEMORY_AUTOSTART=0 varsayilandir"
   exit "$RC"
+fi
+
+# Iskelet bir HARNESS CHECKOUT'una yazilmamali. Submodule'un kendi git deposu
+# vardir; icinden sorulan "git ust dizini" submodule'un kendisini dondurur ve
+# yapilandirma tuketen projeye degil harness'in icine dusar. README'nin onerdigi
+# kisa yol tam bunu yapiyordu (dis denetim, 22 Eyl 2026).
+if sdlc_is_harness "$ROOT"; then
+  echo "burasi harness'in kendi deposu, bir proje degil: $ROOT" >&2
+  echo "" >&2
+  echo "  yeni bir projeye kurmak icin (harness reposundan):" >&2
+  echo "    scripts/sdlc/init.sh --target /yol/proje" >&2
+  echo "" >&2
+  echo "  zaten submodule olarak bagliysa (proje kokunden):" >&2
+  echo "    SDLC_PROJECT_ROOT=\"\$PWD\" sdlc-harness/scripts/sdlc/init.sh" >&2
+  exit 2
 fi
 
 OUT="$ROOT/sdlc/project.json"

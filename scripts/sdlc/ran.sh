@@ -14,11 +14,12 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 TICKET="${1:?kullanim: ran.sh <TICKET> <rol> <model> [efor]}"
 ROLE="${2:?rol}"; MODEL="${3:?model}"; EFFORT="${4:-}"
 
 node --input-type=module -e '
-  const { record } = await import("'"$ROOT"'/gates/journal.ts");
+  const { record } = await import("'"$HARNESS"'/gates/journal.ts");
   const [ticket, role, model, effort] = process.argv.slice(1);
   record({
     gate: `ran:${role}`, ticket, artifact: role, decision: "ran",

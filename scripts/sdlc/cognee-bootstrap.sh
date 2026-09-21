@@ -17,6 +17,7 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 API="${COGNEE_API_URL:-http://localhost:8765}"
 ENV_FILE="$ROOT/.env"
 
@@ -86,9 +87,9 @@ echo "  .env guncellendi: COGNEE_API_KEY, COGNEE_USER_EMAIL${GENERATED:+, COGNEE
 # 5. Rol kimlikleri de yenilenir: sifirlama onlari da gotururur ve agents.env'de
 #    kalan eski satirlar "zaten var" sanilip rol kimligiyle yazan her cagri
 #    Unauthorized aliyordu (olculdu 21 Eyl 2026). Kurulum eksik birakilmaz.
-if [ -x "$ROOT/scripts/sdlc/agents.sh" ]; then
+if [ -x "$HARNESS/scripts/sdlc/agents.sh" ]; then
   echo "  rol kimlikleri kontrol ediliyor"
-  COGNEE_API_KEY="$KEY" "$ROOT/scripts/sdlc/agents.sh" sync 2>&1 | sed 's/^/    /' || true
+  COGNEE_API_KEY="$KEY" "$HARNESS/scripts/sdlc/agents.sh" sync 2>&1 | sed 's/^/    /' || true
 fi
 
 # 6. Kanit: anahtar gercekten okuyor mu

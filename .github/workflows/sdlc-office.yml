@@ -120,28 +120,65 @@ jobs:
             done
           fi
 
-      - name: Ticket dali mi, degilse burada bitir
+      - name: Tuketen repoda komutlar ayakta mi (gercek submodule)
+        # Harness kendi reposunda "iki kok ayni dizin" oldugu icin kok karismasi
+        # gorunmez; bu adim GERCEK bir submodule kurup komutlari kosturur.
+        # Tuketen repoda gereksiz: orada zaten iki kok ayri.
+        if: ${{ !hashFiles('sdlc/project.json') }}
+        run: fixtures/consumer-smoke.sh .
+
+      - name: Ticket dali mi — degilse ISTISNA, ve istisna GORUNUR olur
         id: ticket
+        # BIR BILETI BILET YAPAN SEY BELGELERIDIR, dal adi degil.
+        # Ilk gercek CI kosusunda olculdu (21 Eyl 2026): bu harness'in KENDI
+        # PR'i "sdlc/office-ci" dalindan geldigi icin "office-ci" adinda bir
+        # bilet sanildi ve olmayan artifact'leri arandi.
+        #
+        # ISTISNA POLITIKASI (dis denetim, 22 Eyl 2026). Bilet belgesi olmayan
+        # bir degisiklikte commit disiplini ve teslim hazirligi ATLANIR. Bu
+        # bilincli bir istisnadir — her yazim hatasi duzeltmesi spec/plan/UAT
+        # uretmek zorunda degil. Ama istisna SESSIZ olmamali:
+        #   1. is ozetine acikca yazilir ("ofis disinda"),
+        #   2. proje isterse istisnayi KAPATABILIR:
+        #      sdlc/project.json -> "ci": { "requireTicket": true }
+        #      o zaman bilet belgesi olmayan PR duser.
         run: |
-          # BIR BILETI BILET YAPAN SEY BELGELERIDIR, dal adi degil.
-          # Ilk gercek CI kosusunda olculdu (21 Eyl 2026): bu harness'in KENDI
-          # PR'i "sdlc/office-ci" dalindan geldigi icin "office-ci" adinda bir
-          # bilet sanildi ve olmayan artifact'leri arandi — CI, bilet olmayan bir
-          # degisikligi teslim kapisindan gecirmeye calisti.
           BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           TICKET=""
+          WHY=""
           case "$BRANCH" in
             sdlc/*)
               T="${BRANCH#sdlc/}"
-              if [ -d "docs/sdlc/$T" ]; then
-                TICKET="$T"
-              else
-                echo "dal adi sdlc/ ile basliyor ama docs/sdlc/$T yok — bu bir bilet degil"
-              fi
+              if [ -d "docs/sdlc/$T" ]; then TICKET="$T"
+              else WHY="dal adi sdlc/ ile basliyor ama docs/sdlc/$T yok"; fi
               ;;
-            *) echo "ticket dali degil ($BRANCH) — bilete ozgu denetimler atlaniyor" ;;
+            *) WHY="dal adi sdlc/<TICKET> degil ($BRANCH)" ;;
           esac
           echo "ticket=$TICKET" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$TICKET" ]; then
+            echo "bilet: $TICKET — commit disiplini ve teslim kapisi kosacak" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          REQUIRE=false
+          if [ -f sdlc/project.json ]; then
+            REQUIRE="$(node -e 'try{const p=require("./sdlc/project.json");console.log(p.ci?.requireTicket===true)}catch{console.log(false)}')"
+          fi
+          {
+            echo "### Bu degisiklik OFIS DISINDA"
+            echo ""
+            echo "- sebep: $WHY"
+            echo "- atlanan: commit disiplini, teslim hazirligi, karar defteri ozeti"
+            echo "- kosan: kadro, yapilandirma, sir taramasi, durum makinesi, kuru kosum, selftest, kalibrasyon"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "OFIS DISINDA: $WHY"
+
+          if [ "$REQUIRE" = "true" ]; then
+            echo "sdlc/project.json -> ci.requireTicket true: bu repoda istisna YOK" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Bu repo her degisiklikten bilet belgesi istiyor (ci.requireTicket). $WHY"
+            exit 1
+          fi
 
       - name: Commit disiplini (bir plan gorevi = bir commit)
         if: steps.ticket.outputs.ticket != ''

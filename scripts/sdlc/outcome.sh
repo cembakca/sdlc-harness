@@ -17,6 +17,7 @@ set -uo pipefail
 _SDLC_CALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_SDLC_CALLER_DIR/_root.sh"
 ROOT="$(sdlc_root)" || exit 1
+HARNESS="$(sdlc_harness_root)"
 TICKET="${1:?kullanim: outcome.sh <TICKET> <sonuc> \"<ne oldu>\"}"
 RESULT="${2:?sonuc: shipped-clean | incident | rollback | reverted | unused}"
 WHAT="${3:?ne oldugunu bir cumleyle yaz — sayisiz sonuc ogretmez}"
@@ -28,7 +29,7 @@ case "$RESULT" in
 esac
 
 node -e '
-  const { record, read } = await import("'"$ROOT"'/gates/journal.ts");
+  const { record, read } = await import("'"$HARNESS"'/gates/journal.ts");
   const [ticket, result, what, who] = process.argv.slice(1);
   const rows = read(ticket);
   if (!rows.length) {
@@ -50,6 +51,6 @@ node -e '
 # Hafizaya yazmak DEFTERE yazmak degildir: defter zorunlu, hafiza istege bagli
 # (Cognee kapali olabilir ve hat hafizasiz calisir). Ama sessiz de kalmaz —
 # "yazildi sandim" ile "yazilamadi" ayri seylerdir.
-"$ROOT/scripts/sdlc/memory.sh" remember-decisions "$TICKET" >/dev/null 2>&1 \
+"$HARNESS/scripts/sdlc/memory.sh" remember-decisions "$TICKET" >/dev/null 2>&1 \
   || echo "   (kararlar hafizaya yazilamadi — defter yerinde, hafiza atlandi)" >&2
 echo "kapi defteri hafizaya senkronlandi"
