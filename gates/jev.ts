@@ -9,25 +9,75 @@
  *   yok              → "offline": hiçbir şey uydurulmaz, her soru confidence 0
  *                      döner ve kapı insana düşer (fail-to-human).
  *
- * Anahtar repo kökündeki .env'den okunur; gerçek ortam değişkeni onu ezer.
+ * Anahtar PROJE kökündeki .env'den okunur (harness'ınkinden değil); gerçek
+ * ortam değişkeni onu ezer.
  */
 
 import type { Answer, Answers, Question } from "./questions.ts";
+import * as cache from "./cache.ts";
+import { projectRoot } from "./root.ts";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const DEFAULT_URL = "https://api.typesafe.ai/v1/systemone";
 const DEFAULT_MODEL = "jev-latest";
+
+/**
+ * `jev-latest` bir TAKMA ADDIR ve arkasındaki model isim değişmeden kayar.
+ * Ölçüldü 22 Eyl 2026: `jev-latest` istendi, yanıt `jev-1.13.0` döndü.
+ *
+ * Bu iki yeri birden ilgilendirir:
+ *   ÖNBELLEK — anahtar yalnızca "jev-latest" olsaydı, model kaydığında eski
+ *              kararlar servis edilmeye devam ederdi.
+ *   KALİBRASYON — kayıt "kapılar ayırt ediyor" der; ama BAŞKA bir modelle
+ *              ölçüldüyse o cümle bu model hakkında hiçbir şey söylemez.
+ *
+ * Parmak izi `GET /v1/models` ile alınır — TOKEN HARCAMAZ. Alınamazsa istenen
+ * ad kullanılır: bir kapı, sürüm bilgisi yok diye durmamalı.
+ */
+const MODELS_TTL_MS = 6 * 60 * 60 * 1000;
+let fingerprintMemo: { at: number; value: string } | null = null;
+
+export async function modelFingerprint(): Promise<string> {
+  const wanted = conf("JEV_MODEL", DEFAULT_MODEL);
+  if (isOffline()) return wanted;
+  if (fingerprintMemo && Date.now() - fingerprintMemo.at < MODELS_TTL_MS) return fingerprintMemo.value;
+  try {
+    const base = conf("JEV_API_URL", DEFAULT_URL).replace(/\/systemone$/, "/models");
+    const res = await fetch(base, {
+      headers: { authorization: `Bearer ${process.env.JEV_API_KEY}` },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    const json = (await res.json()) as { models?: { name: string; release_date?: string }[] };
+    const hit = json.models?.find((m) => m.name === wanted);
+    const value = hit?.release_date ? `${wanted}@${hit.release_date}` : wanted;
+    fingerprintMemo = { at: Date.now(), value };
+    return value;
+  } catch {
+    return wanted;
+  }
+}
 
 let envLoaded = false;
 function loadEnv(): void {
   if (envLoaded) return;
   envLoaded = true;
   if (process.env.JEV_API_KEY) return;
-  for (const file of [".env", ".env.development"]) {
-    try {
-      process.loadEnvFile(new URL(`../${file}`, import.meta.url).pathname);
-      if (process.env.JEV_API_KEY) return;
-    } catch {
-      /* dosya yok — offline moda düşeriz */
+  // ANAHTAR PROJEDE DURUR, harness'ta degil. Once "bu dosyanin bir ustu" diye
+  // araniyordu; harness submodule'e cikinca orasi proje koku olmaktan cikti ve
+  // her kapi SESSIZCE offline'a dustu — yani "olcemedim" degil, "hepsini
+  // insana dusuruyorum" (olculdu 22 Eyl 2026, dc-archive'da isOffline() true).
+  // Harness koku yine de denenir: eski duzen ve harness'in kendi testleri icin.
+  const roots = [projectRoot(), resolve(dirname(fileURLToPath(import.meta.url)), "..")];
+  for (const root of roots) {
+    for (const file of [".env", ".env.development"]) {
+      try {
+        process.loadEnvFile(resolve(root, file));
+        if (process.env.JEV_API_KEY) return;
+      } catch {
+        /* dosya yok — offline moda düşeriz */
+      }
     }
   }
 }
@@ -44,16 +94,43 @@ export function isOffline(): boolean {
 
 export type Usage = { input_tokens: number; output_tokens: number };
 
+/**
+ * `opts.cache: false` ÖLÇÜMÜ ZORLAR.
+ *
+ * Kalibrasyon bunu kullanmak ZORUNDA: işi "aynı girdide aynı cevabı veriyor mu"
+ * diye sormak; önbellekten okursa `flapping: 0` her zaman doğru çıkar ve
+ * kontrol boş bir güvenceye dönüşür.
+ */
 export async function ask(
   state: string,
-  questions: Question[]
-): Promise<{ answers: Answers; usage?: Usage; model?: string }> {
+  questions: Question[],
+  opts: { cache?: boolean } = {}
+): Promise<{ answers: Answers; usage?: Usage; model?: string; cached?: boolean }> {
   if (isOffline()) return { answers: offline(questions) };
+
+  const model = conf("JEV_MODEL", DEFAULT_MODEL);
+  const useCache = opts.cache !== false;
+  // Anahtar TAKMA ADI degil, takma adin SU ANKI karsiligini tasir: model
+  // kaydiginda onbellek kendiliginden gecersizlesir.
+  const key = cache.keyOf(useCache ? await modelFingerprint() : model, state, questions);
+  if (useCache) {
+    const hit = cache.get(key);
+    if (hit) {
+      cache.noteHit(hit);
+      return {
+        answers: hit.answers as Answers,
+        // Isabet BEDAVADIR; 0 yazmak durustur. Kazanc `gates/cache.ts` sayar.
+        usage: { input_tokens: 0, output_tokens: 0 },
+        model: hit.model,
+        cached: true,
+      };
+    }
+  }
 
   // Soru adları bizim id'lerimiz; yanıtlar aynı adlarla geri geliyor.
   const body = {
     state,
-    model: conf("JEV_MODEL", DEFAULT_MODEL),
+    model,
     questions: Object.fromEntries(questions.map((q) => [q.id, toApiQuestion(q)])),
   };
 
@@ -96,7 +173,10 @@ export async function ask(
   for (const [id, raw] of Object.entries(json.answers ?? {})) {
     answers[id] = fromApiAnswer(id, raw);
   }
-  return { answers, usage: json.usage, model: json.model };
+  if (useCache) {
+    cache.put({ at: new Date().toISOString(), model: json.model ?? model, key, answers, usage: json.usage });
+  }
+  return { answers, usage: json.usage, model: json.model, cached: false };
 }
 
 function toApiQuestion(q: Question): Record<string, unknown> {

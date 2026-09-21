@@ -17,7 +17,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { read, record, verify } from "./journal.ts";
-import { projectRoot } from "./root.ts";
+import { fromRoot, projectRoot } from "./root.ts";
 
 const ticket = process.argv[2];
 if (!ticket) {
@@ -356,6 +356,44 @@ try {
   );
 } catch {
   add("kademe uyumu", true, "ölçülemedi (assign okunamadı)");
+}
+
+// --- kapılar hangi modelle ölçüldü, kalibrasyon hangi modele ait ----------
+//
+// Kalibrasyon kaydı "kapılar iyiyi kötüden ayırıyor" der. Bu cümle BİR MODEL
+// hakkındadır. `jev-latest` bir takma addır ve arkasındaki model isim
+// değişmeden kayar (ölçüldü 22 Eyl 2026: istenen `jev-latest`, dönen
+// `jev-1.13.0`). Model kaydıysa kayıt hâlâ taze görünür ama artık koşan kapı
+// hakkında hiçbir şey söylemez — en sinsi kapı bozulması budur: hiçbir şey
+// kırmızıya dönmez.
+//
+// Karşılaştırma tümüyle KAYITLAR üzerinden yapılır; model çağrısı yoktur,
+// o yüzden CI'da da çalışır.
+try {
+  const calPath = fromRoot("sdlc/.last-calibration.json");
+  const cal = existsSync(calPath) ? JSON.parse(readFileSync(calPath, "utf8")) : null;
+  const measuredRows = rows.filter((r) => typeof (r as { model?: string }).model === "string" && (r as { model?: string }).model);
+  const usedModels = [...new Set(measuredRows.map((r) => (r as { model?: string }).model as string))];
+  if (!cal) {
+    add("kalibrasyon modeli", true, "kalibrasyon kaydı yok — make sdlc-calibrate");
+  } else if (!cal.model) {
+    // Eski kayitlar model yazmiyordu: bunu ihlal saymak, gecmisi cezalandirmak olur.
+    add("kalibrasyon modeli", true, `kayıtta model yazmıyor — bir sonraki kalibrasyon yazacak (${usedModels.join(", ") || "ölçüm yok"})`);
+  } else if (usedModels.length === 0) {
+    add("kalibrasyon modeli", true, `bu bilette model ölçümü yok (kalibrasyon: ${cal.model})`);
+  } else {
+    const drifted = usedModels.filter((m) => m !== cal.model);
+    add(
+      "kalibrasyon modeli",
+      drifted.length === 0,
+      drifted.length
+        ? `KAPILAR BAŞKA MODELLE ÖLÇÜLDÜ — kalibrasyon ${cal.model}, koşan ${drifted.join(", ")}. ` +
+          `Kayıt taze görünüyor ama koşan kapı hakkında bir şey söylemiyor (make sdlc-calibrate).`
+        : `${cal.model} — kalibrasyon ile ölçümler aynı modelde`
+    );
+  }
+} catch {
+  add("kalibrasyon modeli", true, "ölçülemedi (kalibrasyon kaydı okunamadı)");
 }
 
 const ready = blockers.length === 0;

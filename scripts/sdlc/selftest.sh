@@ -782,6 +782,126 @@ else
   printf '  ✗ %s\n' "gerçek proje dosyaları genel fixture dizinine karışmış"; FAIL=$((FAIL+1))
 fi
 
+# --- Kalibrasyon hangi modele ait, kapilar hangi modelle olctu ----------
+# Kalibrasyon kaydi "kapilar ayirt ediyor" der ve bu cumle BIR MODEL
+# hakkindadir. jev-latest takma adi arkasindaki model isim degismeden kayar
+# (olculdu 22 Eyl 2026: istenen jev-latest, donen jev-1.13.0). Model kaydiysa
+# kayit hala TAZE gorunur ama kosan kapi hakkinda bir sey soylemez — hicbir sey
+# kirmiziya donmedigi icin en sinsi kapi bozulmasi budur.
+MD="$(mktemp -d)/proje"; mkdir -p "$MD/sdlc" "$MD/docs/sdlc/MD-1"
+printf '{"schemaVersion":1,"name":"p","stacks":[]}' > "$MD/sdlc/project.json"
+for f in spec plan REVIEW TESTS UAT; do echo "# $f" > "$MD/docs/sdlc/MD-1/$f.md"; done
+md_row() { # md_row <kapi> <model>
+  env -u SDLC_PROJECT_ROOT SDLC_PROJECT_ROOT="$MD" node --input-type=module -e '
+    const { record } = await import(process.argv[1] + "/gates/journal.ts");
+    record({ gate: process.argv[2], ticket: "MD-1", artifact: "x", decision: "pass",
+             reason: "ok", model: process.argv[3], measures: {} });
+  ' "$HARNESS" "$1" "$2"
+}
+# Ciktiyi DEGISKENE aliyoruz, boruya degil: readiness 20 ile cikar ve
+# pipefail altinda "grep buldu" yerine "node 20 dondu" okunur — kontrol o zaman
+# hep basarisiz gorunur (bu selftest yazilirken tam bu oldu).
+md_readiness() {
+  local out
+  out="$(env -u SDLC_PROJECT_ROOT SDLC_PROJECT_ROOT="$MD" node "$HARNESS/gates/readiness.ts" MD-1 2>&1 || true)"
+  printf '%s\n' "$out" | grep "kalibrasyon modeli" || true
+}
+md_row spec jev-1.13.0
+printf '{"at":"%s","cases":22,"wrong":0,"flapping":0,"repeats":2,"model":"jev-1.13.0"}' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$MD/sdlc/.last-calibration.json"
+MD_LINE="$(md_readiness)"
+if printf '%s' "$MD_LINE" | grep -q "✓"; then
+  printf '  ✓ %s\n' "kalibrasyon ile ölçümler aynı modeldeyken geçiyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "aynı modelde olmasına rağmen engel çıkıyor — $MD_LINE"; FAIL=$((FAIL+1))
+fi
+# Simdi model kaysin: kayit hala taze, ama artik baska bir modeli anlatiyor.
+md_row blast jev-1.14.0
+MD_LINE="$(md_readiness)"
+if printf '%s' "$MD_LINE" | grep -q "BAŞKA MODELLE"; then
+  printf '  ✓ %s\n' "model kayınca kalibrasyon kaydı engel sayılıyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "model kaydı halde kapı geçiyor — bozuk kalibrasyon taze görünüyor"; FAIL=$((FAIL+1))
+fi
+# Eski kayitlar model yazmiyordu: gecmisi cezalandirmamali.
+printf '{"at":"%s","cases":22,"wrong":0,"flapping":0,"repeats":2}' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$MD/sdlc/.last-calibration.json"
+MD_LINE="$(md_readiness)"
+if printf '%s' "$MD_LINE" | grep -q "✓"; then
+  printf '  ✓ %s\n' "modelsiz eski kalibrasyon kaydı engel sayılmıyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "eski kayıt yüzünden duruyor — geçmiş cezalandırılıyor"; FAIL=$((FAIL+1))
+fi
+rm -rf "$MD"
+
+# --- Anahtar PROJEDE aranmali, harness'ta degil -------------------------
+# jev.ts .env'i "bu dosyanin bir ustu" diye ariyordu. Harness submodule'e
+# cikinca orasi proje koku olmaktan cikti ve HER KAPI sessizce offline'a dustu
+# — yani "olcemedim" degil, "hepsini insana dusuruyorum" (olculdu 22 Eyl 2026).
+ENVP="$(mktemp -d)/proje"; mkdir -p "$ENVP/sdlc"
+printf '{"schemaVersion":1,"name":"p","stacks":[]}' > "$ENVP/sdlc/project.json"
+printf 'JEV_API_KEY=selftest-sahte-anahtar\n' > "$ENVP/.env"
+if env -u JEV_API_KEY SDLC_PROJECT_ROOT="$ENVP" node -e '
+const m = await import(process.argv[1] + "/gates/jev.ts");
+process.exit(m.isOffline() ? 1 : 0);' "$HARNESS" 2>/dev/null; then
+  printf '  ✓ %s\n' "JEV anahtarı proje kökündeki .env'den okunuyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "anahtar bulunamıyor — her kapı sessizce offline'a düşer"; FAIL=$((FAIL+1))
+fi
+rm -rf "$ENVP"
+
+# --- Olcum onbellegi: ucuzlatiyor mu, ve DOGRU yerde susuyor mu ----------
+# F4-1'de assign kapisi ayni plan.md'yi 58 kez olctu; 55'i birebir tekrardi ve
+# tek basina 381 bin input token yedi — biletin toplaminin ucte ikisi
+# (olculdu karar defterinden 22 Eyl 2026).
+#
+# Ama onbellegin SUSMASI gereken tek yer var: kalibrasyon. Isi "ayni girdide
+# ayni cevap mi" diye sormak; onbellekten okursa flapping her zaman 0 cikar ve
+# kontrol bos bir guvenceye doner — repeats:1 hatasinin aynisi, baska kilikta.
+CACHE_OUT="$(SDLC_PROJECT_ROOT="$(mktemp -d)" node -e '
+const c = await import(process.argv[1] + "/gates/cache.ts");
+const k1 = c.keyOf("m", "belge", [{ id: "a" }]);
+const k2 = c.keyOf("m", "belge", [{ id: "a" }]);
+const k3 = c.keyOf("m", "BASKA belge", [{ id: "a" }]);
+const k4 = c.keyOf("m", "belge", [{ id: "b" }]);
+const k5 = c.keyOf("BASKA-model", "belge", [{ id: "a" }]);
+const out = [];
+if (k1 !== k2) out.push("ayni girdi farkli anahtar");
+if (k1 === k3) out.push("belge degisince anahtar degismiyor");
+if (k1 === k4) out.push("sorular degisince anahtar degismiyor");
+if (k1 === k5) out.push("model degisince anahtar degismiyor");
+c.put({ at: new Date().toISOString(), model: "m", key: k1, answers: { a: 1 }, usage: { input_tokens: 9, output_tokens: 0 } });
+if (!c.get(k1)) out.push("yazilan kayit geri okunmuyor");
+// Yas siniri: takma ad (jev-latest) arkasindaki model isim degismeden kayabilir.
+c.put({ at: new Date(Date.now() - 40 * 86400000).toISOString(), model: "m", key: "eski", answers: {}, usage: undefined });
+if (c.get("eski")) out.push("yas siniri uygulanmiyor");
+process.env.SDLC_GATE_NO_CACHE = "1";
+if (c.get(k1)) out.push("SDLC_GATE_NO_CACHE=1 onbellegi kapatmiyor");
+console.log(out.join(" · "));
+' "$HARNESS" 2>&1)" || CACHE_OUT="calisamadi: $CACHE_OUT"
+if [ -z "$CACHE_OUT" ]; then
+  printf '  ✓ %s\n' "ölçüm önbelleği içerikle anahtarlanıyor (belge/soru/model/yaş)"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "ölçüm önbelleği bozuk — $CACHE_OUT"; FAIL=$((FAIL+1))
+fi
+
+# Kalibrasyondaki HER olcum onbellegi acikca kapatmali.
+CAL_ASKS="$(grep -c 'await ask(' "$HARNESS/gates/calibrate.ts")"
+CAL_NOCACHE="$(grep -c 'cache: false' "$HARNESS/gates/calibrate.ts")"
+if [ "$CAL_ASKS" = "$CAL_NOCACHE" ] && [ "$CAL_ASKS" != "0" ]; then
+  printf '  ✓ %s\n' "kalibrasyon önbelleği kullanmıyor ($CAL_ASKS ölçümün $CAL_NOCACHE'i açıkça kapalı)"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "kalibrasyon önbellekten okuyor — salınım ölçülemez ($CAL_ASKS ölçüm, $CAL_NOCACHE kapalı)"; FAIL=$((FAIL+1))
+fi
+
+# Onbellek git'e girmemeli: paylasilan bir onbellek "kim neyi olctu" sorusunu
+# bulanıklastirir ve CI zaten modelsiz kosar.
+if grep -qxF '.sdlc-cache/' "$ROOT/.gitignore" 2>/dev/null; then
+  printf '  ✓ %s\n' "ölçüm önbelleği git'e girmiyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' ".sdlc-cache/ .gitignore'da yok — ölçüm kayıtları repoya sızar"; FAIL=$((FAIL+1))
+fi
+
 # --- Kalibrasyon dongusu kopuk mu (MODELSIZ) -----------------------------
 # Kalibrasyon vakalarinin fixture'lari iki yerden gelir: genel olanlar
 # harness'ta, gercek olanlar projede. Eksik bir fixture OLCULMEYEN bir vakadir:

@@ -79,14 +79,16 @@ let complexityReason = "offline — ölçüm yok, güvenli tarafta";
 let audience = "customer";
 let surface = "temporal";
 let tokens = 0;
+let fromCache = false;
 
 if (!isOffline()) {
   const state = readFileSync(statePath, "utf8");
-  const { answers, usage } = await ask(
+  const { answers, usage, cached } = await ask(
     `# ${ROUTE.stateHint}\n\n${state}`,
     [...ROUTE.questions(), ...ASSIGN_QUESTIONS]
   );
   tokens = usage?.input_tokens ?? 0;
+  fromCache = cached === true;
   const routing = ROUTE.decide(answers);
   complexity = routing.tier;
   complexityReason = routing.reason;
@@ -255,6 +257,8 @@ if (roleArg) {
         ticket,
         state: statePath.replace(`${root}/`, ""),
         measured: { complexity, audience, verification_surface: surface },
+        // "0 token" ile "olculmedi" ayni sey degil: hangisi oldugu yazili olmali.
+        source: isOffline() ? "offline" : fromCache ? "önbellek" : "ölçüm",
         reused: known,
         ...(tokens ? { usage: { input_tokens: tokens } } : {}),
         assignment,

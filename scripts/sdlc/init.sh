@@ -68,6 +68,11 @@ if [ -n "$TARGET" ]; then
     ln -s "../../$SUB/.claude/workflows/sdlc.js" "$TARGET/.claude/workflows/sdlc.js"
   fi
 
+  # Onbellek ve worktree dizinleri git'e girmemeli.
+  for ign in ".sdlc-worktrees/" ".sdlc-cache/"; do
+    grep -qxF "$ign" "$TARGET/.gitignore" 2>/dev/null || echo "$ign" >> "$TARGET/.gitignore"
+  done
+
   mkdir -p "$TARGET/docs/sdlc"
   [ -e "$TARGET/docs/sdlc/templates" ] || cp -R "$HARNESS/docs/sdlc/templates" "$TARGET/docs/sdlc/templates" 2>/dev/null
   [ -e "$TARGET/docs/sdlc/known-flaky.txt" ] || : > "$TARGET/docs/sdlc/known-flaky.txt"

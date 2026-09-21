@@ -119,7 +119,7 @@ $STACKS
 JSON
 
 echo "# Ornek proje ($SHAPE)" > README.md
-printf '.sdlc-worktrees/\n' > .gitignore
+printf '.sdlc-worktrees/\n.sdlc-cache/\n' > .gitignore
 
 git init -q -b main
 git add -A

@@ -13,6 +13,16 @@ Yapılandırma şeması `sdlc/project.json` içindeki `schemaVersion` ile taşı
 Harness anladığından **büyük** bir sürüm görürse durur ve "harness eski" der;
 sessizce yanlış okumaz.
 
+## Ölçüm önbelleği ve model kimliği — 22 Eylül 2026
+
+- `gates/cache.ts`: içerikle anahtarlanan ölçüm önbelleği (`<proje>/.sdlc-cache/`,
+  git'e girmez). Kalibrasyon onu **kullanmaz** — yoksa salınım ölçülemez.
+- Model takma adı çözülüp kaydediliyor; kalibrasyon başka bir modelle
+  yapıldıysa `readiness` durdurur.
+- `jev.ts` anahtarı **proje** kökündeki `.env`'den okuyor. Önce harness köküne
+  bakıyordu ve ayırmadan sonra her kapı sessizce offline'a düşmüştü.
+- CI artık `main`'e push'ta da koşuyor.
+
 ## Şema 1 — 22 Eylül 2026
 
 İlk sürümlenmiş şema. Alanlar: `name`, `stacks[]`

@@ -61,7 +61,7 @@ if (gate.wantsProjectContext) {
   }
 }
 
-const { answers, usage, model } = await ask(`# ${gate.stateHint}\n\n${state}`, gate.questions);
+const { answers, usage, model, cached } = await ask(`# ${gate.stateHint}\n\n${state}`, gate.questions);
 const result = gate.decide(answers, state);
 
 // Karar deftere düşer: hangi kapı neyi durdurdu, hangi sayıyla.
@@ -112,7 +112,11 @@ console.log(
     {
       gate: gate.name,
       artifact: artifactPath,
-      mode: isOffline() ? "offline (no JEV_API_KEY — every gate falls to a human)" : `jev (${model ?? "?"})`,
+      mode: isOffline()
+        ? "offline (no JEV_API_KEY — every gate falls to a human)"
+        // Onbellekten okundugunu SOYLEMEK zorundayiz: "0 token" ile "olculmedi"
+        // ayni sey degil, ve hangisi oldugunu okuyan bilmeli.
+        : `jev (${model ?? "?"})${cached ? " · önbellekten" : ""}`,
       ...(usage ? { usage } : {}),
       ...result,
       answers,

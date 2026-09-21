@@ -169,6 +169,8 @@ if (isOffline()) {
   process.exit(1);
 }
 
+let lastModel = "";
+
 async function runOnce(c: GateCase | RouteCase): Promise<{ verdict: string; detail: string }> {
   // FIXTURE IKI YERDEN GELIR:
   //   gates/fixtures/  → harness'in kendi vakalari (genel, projeden bagimsiz)
@@ -184,8 +186,11 @@ async function runOnce(c: GateCase | RouteCase): Promise<{ verdict: string; deta
   if (!found) throw new Error(`fixture bulunamadi: ${c.fixture}`);
   const state = readFileSync(found.path, "utf8");
   if (c.kind === "route") {
-    const { answers, usage } = await ask(`# ${ROUTE.stateHint}\n\n${state}`, ROUTE.questions());
+    // ONBELLEK KAPALI: kalibrasyonun isi "ayni girdide ayni cevap mi" diye
+    // sormak. Onbellekten okursa flapping her zaman 0 cikar — bos guvence.
+    const { answers, usage, model } = await ask(`# ${ROUTE.stateHint}\n\n${state}`, ROUTE.questions(), { cache: false });
     tokens += usage?.input_tokens ?? 0;
+    if (model) lastModel = model;
     const r = ROUTE.decide(answers);
     return { verdict: r.tier, detail: r.reason };
   }
@@ -195,7 +200,9 @@ async function runOnce(c: GateCase | RouteCase): Promise<{ verdict: string; deta
   // Kalibrasyonun tek isi gercegi taklit etmek; farkli girdiyle olcerse
   // "wrong: 0" hicbir sey soylemez.
   const prepared = gate.prepare ? gate.prepare(state) : state;
-  const { answers, usage } = await ask(`# ${gate.stateHint}\n\n${prepared}`, gate.questions);
+  // ONBELLEK KAPALI — yukaridaki gerekce.
+  const { answers, usage, model } = await ask(`# ${gate.stateHint}\n\n${prepared}`, gate.questions, { cache: false });
+  if (model) lastModel = model;
   tokens += usage?.input_tokens ?? 0;
   const r = gate.decide(answers, prepared);
   return {
@@ -259,6 +266,11 @@ try {
         wrong,
         flapping,
         repeats,
+        // MODEL KAYDA GECER. "Kapilar ayirt ediyor" cumlesi BIR MODEL
+        // hakkindadir; jev-latest takma adi arkasindaki model isim degismeden
+        // kayar (olculdu 22 Eyl 2026: istenen jev-latest, donen jev-1.13.0).
+        // Model yazilmazsa kayit taze gorunur ama neyi olctugu bilinmez.
+        model: lastModel,
         inputTokens: tokens,
       },
       null,

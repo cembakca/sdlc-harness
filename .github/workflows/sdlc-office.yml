@@ -12,6 +12,12 @@ name: SDLC Office
 # sdlc/ci.yml. Iki kopyanin ayrismasi selftest'te yakalanir.
 on:
   pull_request:
+  # main'de de kossun. PR'da yesil olan bir sey birlesmis halde kirmizi olabilir:
+  # submodule isaretcisi geride kalir, CI kopyasi eskir, iki PR ayri ayri yesilken
+  # birlestiginde bozulur. Ayrica harness kendi reposunda dogrudan main'e yazar;
+  # yalnizca pull_request tetiklemesi orada CI'i HIC kosturmuyordu.
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:

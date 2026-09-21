@@ -68,6 +68,39 @@ içinde dursaydı iç içe depo olurdu ve dal/HEAD sorguları harness'ın dalın
 döndürürdü — o zaman "taban dal ilerledi" gibi
 senaryolar ölçmedikleri şeyi ölçmüş olur.
 
+## Ölçüm maliyeti ve kararlılık
+
+Kapı ölçümü saf bir fonksiyondur: aynı belge + aynı sorular + aynı model → aynı
+cevap. Buna rağmen F4-1'de `assign` kapısı aynı `plan.md`'yi **58 kez** ölçtü;
+55'i birebir tekrardı ve tek başına **381 bin** input token yedi — biletin
+toplam 587 bininin üçte ikisi (karar defterinden ölçüldü).
+
+```bash
+make sdlc-cache             # kaç kayıt, isabetlerle ne kazanıldı
+make sdlc-cache CLEAR=1     # temizle
+SDLC_GATE_NO_CACHE=1 ...    # tek koşu için kapat
+```
+
+Önbellek `<proje>/.sdlc-cache/` altında, git'e girmez. Anahtar **içeriktir**:
+belge, sorular ve modelin o anki karşılığı. Üçünden biri değişirse kayıt
+kendiliğinden geçersizdir; ayrıca bir yaş sınırı vardır
+(`SDLC_GATE_CACHE_TTL_DAYS`, varsayılan 14).
+
+**Nerede susması gerekir:** kalibrasyon. İşi tam da "aynı girdide aynı cevabı
+veriyor mu" diye sormak; önbellekten okursa `flapping: 0` her zaman doğru çıkar
+ve kontrol boş bir güvenceye dönüşür — `repeats: 1` hatasının aynısı, başka
+kılıkta. `gates/calibrate.ts` her ölçümde önbelleği açıkça kapatır, selftest de
+bunu denetler.
+
+### Model bir takma addır
+
+`jev-latest` istenir, `jev-1.13.0` döner. Model, isim değişmeden kayabilir; o
+yüzden hem önbellek anahtarı hem kalibrasyon kaydı modelin o anki karşılığını
+taşır (`GET /v1/models`, token harcamaz). Kalibrasyon bir modelle yapılıp
+kapılar başkasıyla koşarsa `gates/readiness.ts` durdurur: kayıt hâlâ taze
+görünür ama koşan kapı hakkında hiçbir şey söylemez — hiçbir şeyin kırmızıya
+dönmediği bu durum, en sinsi kapı bozulmasıdır.
+
 ## Kalibrasyon
 
 Kapılar sessizce bozulur: model sürümü değişir, eşik kayar, bir fixture artık

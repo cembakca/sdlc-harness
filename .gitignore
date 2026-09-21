@@ -2,4 +2,6 @@
 ops/cognee/agents.env
 ops/cognee/.ingest-state.json
 .sdlc-worktrees/
+# Kapi olcum onbellegi: yerel, paylasilmaz (CI zaten modelsiz kosar).
+.sdlc-cache/
 node_modules/
