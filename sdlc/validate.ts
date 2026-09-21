@@ -220,6 +220,38 @@ export function validate(rawText: string, root: string): Problem[] {
     }
   }
 
+  // --- projenin kendi kalibrasyon vakaları ---------------------------------
+  // Eksik bir fixture ölçülmeyen bir vakadır: kapı o durumda hiç sınanmaz ama
+  // rapor "22 vakanın 22'si tuttu" der. Eskiden bu ancak ÜCRETLİ bir koşuda
+  // ortaya çıkıyordu; burada bedava çıkar.
+  const cal = cfg.calibration;
+  if (cal !== undefined) {
+    if (typeof cal !== "object" || cal === null) add("error", "calibration", "nesne olmalı");
+    else if (cal.cases !== undefined) {
+      if (!Array.isArray(cal.cases)) add("error", "calibration.cases", "dizi olmalı");
+      else cal.cases.forEach((c: any, i: number) => {
+        const at = `calibration.cases[${i}]`;
+        if (typeof c?.fixture !== "string" || !c.fixture) { add("error", at, "fixture gerekli"); return; }
+        if (c.fixture.includes("..") || c.fixture.startsWith("/")) {
+          add("error", at, `fixture adı sdlc/fixtures içinde olmalı: ${c.fixture}`);
+          return;
+        }
+        if (!existsSync(resolve(root, "sdlc/fixtures", c.fixture))) {
+          add("error", at, `fixture yok: sdlc/fixtures/${c.fixture} — bu vaka hiç ölçülmez`);
+        }
+        if (c.kind === "route") {
+          if (typeof c.expect !== "string") add("error", at, "route vakası için expect gerekli");
+        } else {
+          if (typeof c.gate !== "string" || !c.gate) add("error", at, "gate gerekli");
+          if (typeof c.expect !== "string" || !c.expect) add("error", at, "expect gerekli");
+        }
+        if (typeof c?.because !== "string" || c.because.trim().length < 10) {
+          add("warn", at, "gerekçe yok — vakanın neden o kararı beklediği yazılmalı");
+        }
+      });
+    }
+  }
+
   // --- sır taraması istisnaları -------------------------------------------
   const allow = cfg.secrets?.allowPaths;
   if (allow !== undefined) {

@@ -68,6 +68,28 @@ içinde dursaydı iç içe depo olurdu ve dal/HEAD sorguları harness'ın dalın
 döndürürdü — o zaman "taban dal ilerledi" gibi
 senaryolar ölçmedikleri şeyi ölçmüş olur.
 
+## Kalibrasyon
+
+Kapılar sessizce bozulur: model sürümü değişir, eşik kayar, bir fixture artık
+ayırt etmez. Ölçüm iki kaynaktan beslenir:
+
+| | nerede | ne |
+|---|---|---|
+| genel vakalar | `gates/fixtures/` (harness) | projeden bağımsız, el yapımı |
+| proje vakaları | `sdlc/fixtures/` (proje) | **gerçek** artifact'ler, `project.json` → `calibration.cases` |
+
+El yapımı fixture'lar kapıyı kendi seçtiği sınavda başarılı gösterir: gerçek
+bir `plan.md` girdiğinde sinyal 0.40'a çöküyordu ve fixture'larda öyle bir
+girdi yoktu. O yüzden gerçek girdi vazgeçilmez — ama **projeye** aittir.
+
+```bash
+make sdlc-calibrate-plan   # MODELSİZ: hangi vaka hangi fixture'dan, eksik var mı
+make sdlc-calibrate        # gerçek ölçüm (model çağırır, ücretli)
+```
+
+Eksik bir fixture **ölçülmeyen** bir vakadır: kapı o durumda hiç sınanmaz ama
+rapor "hepsi tuttu" der. `--plan` bunu bedava yakalar; selftest ve CI koşturur.
+
 ## Kurallar
 
 Hat'ın anayasası tüketen repodaki `.claude/CLAUDE.md` içindedir. Özet:

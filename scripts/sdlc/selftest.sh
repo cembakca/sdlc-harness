@@ -782,6 +782,18 @@ else
   printf '  ✗ %s\n' "gerçek proje dosyaları genel fixture dizinine karışmış"; FAIL=$((FAIL+1))
 fi
 
+# --- Kalibrasyon dongusu kopuk mu (MODELSIZ) -----------------------------
+# Kalibrasyon vakalarinin fixture'lari iki yerden gelir: genel olanlar
+# harness'ta, gercek olanlar projede. Eksik bir fixture OLCULMEYEN bir vakadir:
+# kapi o durumda hic sinanmaz ama rapor "hepsi tuttu" der. Eskiden bu yalnizca
+# UCRETLI bir kosuda ortaya cikiyordu (olculdu 22 Eyl 2026: harness'ta uc tane
+# projeye ozgu vaka gomuluydu ve baska her projede dusuyordu).
+if OUT_CAL="$(SDLC_PROJECT_ROOT="$ROOT" node "$HARNESS/gates/calibrate.ts" --plan 2>&1)"; then
+  printf '  ✓ %s\n' "kalibrasyon vakalarının hepsinin fixture'ı var ($(printf '%s' "$OUT_CAL" | tail -1 | sed 's/^ *//'))"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "kalibrasyon döngüsü kopuk — $(printf '%s' "$OUT_CAL" | grep 'FIXTURE YOK' | tr '\n' ' ')"; FAIL=$((FAIL+1))
+fi
+
 # --- Yigin secimi: her yigina gercekten is dusuyor mu --------------------
 # Yigin secimi ILK eslesmeyi alir. Daha genel bir desen ondeyse arkasindaki
 # yigina hicbir degisiklik ulasmaz: testleri hic kosmaz ve "gecti" gorunur.

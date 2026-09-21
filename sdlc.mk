@@ -50,6 +50,9 @@ sdlc-gate: ## Tek kapi: make sdlc-gate GATE=spec ARTIFACT=docs/sdlc/F4-1/spec.md
 sdlc-diagnose: ## Hangi kabul kriteri puani cekiyor: make sdlc-diagnose ARTIFACT=docs/sdlc/F4-1/spec.md
 	@node $(SDLC)gates/diagnose.ts $(ARTIFACT)
 
+sdlc-calibrate-plan: ## Kalibrasyon dongusu saglam mi (MODELSIZ, bedava)
+	@node $(SDLC)gates/calibrate.ts --plan
+
 sdlc-calibrate: ## Kapilar iyiyi kotuden ayiriyor mu (bilinen orneklerle)
 	@node $(SDLC)gates/calibrate.ts
 
@@ -209,4 +212,4 @@ sdlc-memory-verify: ## Hafiza GERCEKTEN calisiyor mu (yaz -> graf -> geri oku)
 
 # ---------------------------------------------------------------- SDLC son
 
-.PHONY: sdlc-config cognee-agents cognee-ask cognee-bootstrap cognee-cloud cognee-down cognee-full cognee-graph cognee-ingest cognee-local cognee-logs cognee-project cognee-rebuild cognee-reset cognee-skills cognee-up sdlc sdlc-approve sdlc-assign sdlc-calibrate sdlc-chain sdlc-check sdlc-commits sdlc-defer sdlc-diagnose sdlc-doctor sdlc-dryrun sdlc-gate sdlc-github sdlc-hindsight sdlc-history sdlc-init sdlc-land sdlc-memory sdlc-memory-quality sdlc-memory-verify sdlc-merge-check sdlc-new sdlc-orchestrate sdlc-outcome sdlc-postbuild sdlc-ready sdlc-run sdlc-secrets sdlc-selftest sdlc-status sdlc-test 
+.PHONY: sdlc-config sdlc-calibrate-plan cognee-agents cognee-ask cognee-bootstrap cognee-cloud cognee-down cognee-full cognee-graph cognee-ingest cognee-local cognee-logs cognee-project cognee-rebuild cognee-reset cognee-skills cognee-up sdlc sdlc-approve sdlc-assign sdlc-calibrate sdlc-chain sdlc-check sdlc-commits sdlc-defer sdlc-diagnose sdlc-doctor sdlc-dryrun sdlc-gate sdlc-github sdlc-hindsight sdlc-history sdlc-init sdlc-land sdlc-memory sdlc-memory-quality sdlc-memory-verify sdlc-merge-check sdlc-new sdlc-orchestrate sdlc-outcome sdlc-postbuild sdlc-ready sdlc-run sdlc-secrets sdlc-selftest sdlc-status sdlc-test 

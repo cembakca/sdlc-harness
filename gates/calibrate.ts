@@ -2,8 +2,10 @@
 /**
  * gates/calibrate.ts — kapılar gerçekten ayırt ediyor mu, ve kararlı mı?
  *
- *   node gates/calibrate.ts          # her vaka 1 kez
+ *   node gates/calibrate.ts          # her vaka 2 kez (salınım ölçülebilsin)
  *   node gates/calibrate.ts 5        # her vaka 5 kez — SALINIM ölçümü
+ *   node gates/calibrate.ts --plan   # MODELSİZ: hangi vaka hangi fixture'dan,
+ *                                    #   eksik var mı (bedava, CI'da koşar)
  *
  * İki ayrı soru ölçülüyor:
  *   1. Doğruluk  — kapı bilinen-iyiyi geçiriyor, bilinen-kötüyü durduruyor mu?
@@ -17,13 +19,16 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { GATES, ROUTE, type GateName, type TierName } from "./questions.ts";
+import { fromRoot, harnessRoot } from "./root.ts";
+import { loadProject } from "../sdlc/project.ts";
 import { ask, isOffline } from "./jev.ts";
 
 type GateCase = { kind: "gate"; gate: GateName; fixture: string; expect: string; because: string };
 type RouteCase = { kind: "route"; fixture: string; expect: TierName; because: string };
 
-const CASES: (GateCase | RouteCase)[] = [
+const GENERIC_CASES: (GateCase | RouteCase)[] = [
   // --- spec kapısı: ölçülebilirlik ve belirsizlik
   { kind: "gate", gate: "spec", fixture: "spec-tight.md", expect: "pass",
     because: "ölçülebilir EARS kriterleri, açık kapsam dışı, açık soru yok" },
@@ -72,18 +77,11 @@ const CASES: (GateCase | RouteCase)[] = [
   // Beklenen degerler UYDURULMADI: F4-1 gercekten teslim edildi (shipped-clean,
   // olay yok) ve kararlari defterde duruyor. Yani bu vakalar "dogru cevabi"
   // gecmisten aliyor, bizim tahminimizden degil.
-  { kind: "gate", gate: "blast", fixture: "real-F4-1-plan.md", expect: "human",
-    because: "GERCEK: migration yok ama bildirim + musteri verisi yuzeyi var; " +
-      "insan onayladi ve is temiz teslim edildi. Kapinin bunu insana dusurmesi DOGRUYDU. " +
-      "Bu vaka radius sorusunun yeniden tasarlanmasini tetikledi: eski hali ayni karari " +
-      "0.40-0.53 guvenle veriyordu (yani 'bilmiyorum'), yenisi 1.00 guvenle ve adiyla " +
-      "veriyor — musteri verisi sistemden cikiyor." },
-  { kind: "gate", gate: "scope", fixture: "real-F4-1-spec.md", expect: "human",
-    because: "GERCEK: 15 kabul kriteri tek ticket'a sigdirildi; olcum kararsizdi " +
-      "(tek 0.50 / iki 0.29) ve insan tek ticket dedi. Sonuc onu dogruladi." },
-  { kind: "gate", gate: "review", fixture: "real-F4-1-review.md", expect: "human",
-    because: "GERCEK: high bulgu kapandiktan sonraki hali — kalan 3 medium " +
-      "teslim dogrulamasi ailesinden ve F4-2'ye devredildi. Ne temiz gecis ne blok." },
+  // GERCEK VAKALAR ARTIK PROJEDE TANIMLANIR. Burada uc tane Crawlens vakasi
+  // gomuluydu; harness ayri repoya cikinca bunlar BASKA HER PROJEDE eksik
+  // fixture olarak dusuyordu (olculdu 22 Eyl 2026: 22 vakanin 3'u).
+  // Projenin kendi vakalari: sdlc/project.json -> calibration.cases,
+  // dosyalari sdlc/fixtures/ altinda.
 
   // --- yönlendirme: hangi iş hangi modelde koşmalı
   { kind: "route", fixture: "plan-mechanical-precedent.md", expect: "mechanical",
@@ -97,15 +95,77 @@ const CASES: (GateCase | RouteCase)[] = [
     because: "migration + auth + ödeme; emsali yok" },
 ];
 
-const here = new URL(".", import.meta.url).pathname;
+/**
+ * Projenin KENDI vakaları — `sdlc/project.json` → `calibration.cases`.
+ *
+ * El yapımı fixture'lar kapıyı kendi seçtiği sınavda başarılı gösterir: gerçek
+ * bir `plan.md` girdiğinde sinyal 0.40'a çöküyordu, fixture'larda öyle bir
+ * girdi yoktu (ölçüldü 21 Eyl 2026). O yüzden "gerçek girdiyle kalibre et"
+ * vazgeçilmez — ama gerçek girdi PROJEYE aittir, harness'a değil.
+ *
+ * Beklenen değer uydurulmaz: teslim edilmiş bir işin defterdeki kararı yazılır.
+ */
+function projectCases(): (GateCase | RouteCase)[] {
+  const raw = (loadProject() as any).calibration?.cases;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((c: any) =>
+    c.kind === "route"
+      ? { kind: "route", fixture: c.fixture, expect: c.expect, because: c.because ?? "" }
+      : { kind: "gate", gate: c.gate, fixture: c.fixture, expect: c.expect, because: c.because ?? "" },
+  );
+}
+
+const CASES: (GateCase | RouteCase)[] = [...GENERIC_CASES, ...projectCases()];
+
+// IKI KOK. Harness ayri repoya cikinca bunlar ayni dizin degil:
+//   genel vakalar → harness'in kendi gates/fixtures/  (projeden bagimsiz)
+//   proje vakalari → PROJENIN sdlc/fixtures/          (gercek artifact'ler)
+// Ikisini karistirmak, "gercek girdiyle kalibre et" ozelligini sessizce
+// kapatirdi: harness'in icinde proje fixture'i aranir, bulunmaz, vaka duser.
+const GENERIC_DIR = resolve(harnessRoot(), "gates/fixtures");
+const PROJECT_DIR = fromRoot("sdlc/fixtures");
+
+/** Vakanin fixture'i nerede — ve var mi. */
+function fixtureOf(c: GateCase | RouteCase): { path: string; source: "genel" | "proje" } | null {
+  const generic = resolve(GENERIC_DIR, c.fixture);
+  if (existsSync(generic)) return { path: generic, source: "genel" };
+  const own = resolve(PROJECT_DIR, c.fixture);
+  if (existsSync(own)) return { path: own, source: "proje" };
+  return null;
+}
 // VARSAYILAN 2, 1 DEGIL. Salinim tek kosuyla OLCULEMEZ: repeats=1 iken
 // "flapping: 0" her zaman dogru cikar ve CI'daki salinim kontrolu bos bir
 // guvenceye donusur (olculdu 21 Eyl 2026 — kayitta repeats:1 vardi).
 // Bir kontrolun her zaman yesil vermesi, kontrol olmadigi anlamina gelir.
 const repeats = Math.max(2, Number(process.argv[2] ?? 2));
 
+// --plan: MODEL CAGIRMADAN dongunun saglam olup olmadigini gosterir.
+// Eksik bir fixture eskiden yalnizca UCRETLI bir kosuda ortaya cikiyordu;
+// artik selftest ve CI bunu bedava yakalar.
+if (process.argv.includes("--plan")) {
+  let missing = 0;
+  const bySource: Record<string, number> = { genel: 0, proje: 0 };
+  console.log(`kalibrasyon planı · ${CASES.length} vaka`);
+  console.log(`  genel vakalar : ${GENERIC_DIR}`);
+  console.log(`  proje vakaları: ${PROJECT_DIR}${existsSync(PROJECT_DIR) ? "" : "  (yok — yalnızca genel vakalar)"}`);
+  for (const c of CASES) {
+    const found = fixtureOf(c);
+    const label = c.kind === "route" ? "route" : c.gate;
+    if (!found) {
+      missing++;
+      console.log(`  ✗ ${label.padEnd(9)} ${c.fixture} — FIXTURE YOK`);
+    } else {
+      bySource[found.source]++;
+    }
+  }
+  console.log(`  ${bySource.genel} genel · ${bySource.proje} proje · ${missing} eksik`);
+  if (missing) console.log("\neksik fixture = ölçülmeyen vaka: kapı o durumda hiç sınanmıyor.");
+  process.exit(missing ? 1 : 0);
+}
+
 if (isOffline()) {
   console.error("JEV_API_KEY yok — kalibrasyon offline modda anlamsız.");
+  console.error("  modelsiz denetim için: node gates/calibrate.ts --plan");
   process.exit(1);
 }
 
@@ -120,9 +180,9 @@ async function runOnce(c: GateCase | RouteCase): Promise<{ verdict: string; deta
   // sinavda basarili gosteriyordu (olculdu 21 Eyl 2026: radius guveni gercek
   // bir planda 0.40'a dusuyordu, fixture'larda oyle bir girdi yoktu).
   // Her proje kendi kalibrasyonunu kendi isiyle besler.
-  const generic = `${here}fixtures/${c.fixture}`;
-  const projectOwn = `${here}../sdlc/fixtures/${c.fixture}`;
-  const state = readFileSync(existsSync(generic) ? generic : projectOwn, "utf8");
+  const found = fixtureOf(c);
+  if (!found) throw new Error(`fixture bulunamadi: ${c.fixture}`);
+  const state = readFileSync(found.path, "utf8");
   if (c.kind === "route") {
     const { answers, usage } = await ask(`# ${ROUTE.stateHint}\n\n${state}`, ROUTE.questions());
     tokens += usage?.input_tokens ?? 0;
@@ -188,7 +248,10 @@ console.log(
 // Sonucu diske yaz: SessionStart hook'u kalibrasyonun bayatladigini buradan anlar.
 try {
   writeFileSync(
-    `${here}.last-calibration.json`,
+    // Kayit PROJEYE ait: olculen sey bu projenin kapilaridir (genel vakalar +
+    // projenin kendi artifact'leri). Harness'in icine yazmak, tuketen repoda
+    // submodule'u kirletirdi ve olcumu yanlis repoya baglardi.
+    fromRoot("sdlc/.last-calibration.json"),
     JSON.stringify(
       {
         at: new Date().toISOString(),

@@ -47,11 +47,18 @@ jobs:
       - name: Kadro kurallari (kodu yazan kendi kodunu denetlemesin)
         run: node ${SDLC}sdlc/roster.ts --check
 
+      - name: Kalibrasyon dongusu saglam mi (modelsiz)
+        # Eksik bir fixture OLCULMEYEN bir vakadir: kapi o durumda hic sinanmaz
+        # ama rapor "hepsi tuttu" der. Model cagirmadan gorulur.
+        run: node ${SDLC}gates/calibrate.ts --plan
+
       - name: Kalibrasyon kaydi taze mi
+        # Kayit PROJEDE durur (sdlc/.last-calibration.json): olculen sey bu
+        # projenin kapilaridir — genel vakalar + projenin kendi artifact'leri.
         run: |
-          if [ -f ${SDLC}gates/.last-calibration.json ]; then
+          if [ -f sdlc/.last-calibration.json ]; then
             node -e '
-              const r = JSON.parse(require("fs").readFileSync((process.env.SDLC || "")+"gates/.last-calibration.json","utf8"));
+              const r = JSON.parse(require("fs").readFileSync("sdlc/.last-calibration.json","utf8"));
               const days = Math.floor((Date.now() - new Date(r.at).getTime()) / 86400000);
               console.log(`son kalibrasyon: ${days} gun once · ${r.cases - r.wrong}/${r.cases} dogru · ${r.flapping} salinim`);
               if (r.wrong > 0) { console.error("KAPILAR AYIRT EDEMIYOR — duzeltilmeden PR birlestirilmemeli"); process.exit(1); }
@@ -60,9 +67,11 @@ jobs:
               if (!(r.repeats >= 2)) { console.error(`kalibrasyon ${r.repeats}x kosmus — salinim olculmemis (en az 2 gerekir)`); process.exit(1); }
               if (days > 45) { console.error(`kalibrasyon ${days} gundur yenilenmemis`); process.exit(1); }
             '
-          else
+          elif [ -f sdlc/project.json ]; then
             echo "kalibrasyon kaydi yok — make sdlc-calibrate"
             exit 1
+          else
+            echo "bu repoda proje yok — kayit beklenmiyor (dongu yukarida modelsiz denetlendi)"
           fi
 
       - name: Yapilandirma okunabilir mi (alan-alan)

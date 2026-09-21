@@ -20,7 +20,16 @@ sessizce yanlış okumaz.
 `typecheckCommand`, `deps`, `envFile`/`envFiles`, `clearEnv`, `services`,
 `testSelector`, `failureFilePattern`, `infraFailurePatterns`),
 `criticalSurfaces[]`, `criticalPaths[]`, `memory`
-(`processDataset`, `productDataset`, `productDocs`), `secrets.allowPaths`.
+(`processDataset`, `productDataset`, `productDocs`), `secrets.allowPaths`,
+`calibration.cases[]`.
+
+`calibration.cases[]` yeni: projenin **gerçek** artifact'leriyle beslenen
+kalibrasyon vakaları burada tanımlanır, dosyalar `sdlc/fixtures/` altında.
+Önce harness'a gömülüydü ve başka her projede eksik fixture olarak düşüyordu.
+
+Kalibrasyon kaydı `gates/.last-calibration.json` yerine
+**`sdlc/.last-calibration.json`** — ölçülen şey projenin kapılarıdır, harness
+içine yazmak tüketen repoda submodule'ü kirletirdi.
 
 `schemaVersion` yazılmamışsa 1 varsayılır ve uyarı basılır.
 
