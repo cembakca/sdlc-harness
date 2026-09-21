@@ -34,6 +34,22 @@ Aynı repoda ikisi aynı dizindir; ayrıldığında değildir. Keşif açıktır
 `SDLC_PROJECT_ROOT` → yukarı yürüyüp `sdlc/project.json` → git üst dizini →
 sesli hata (`gates/root.ts`, `scripts/sdlc/_root.sh`).
 
+## Sürüm ve yapılandırma sözleşmesi
+
+Tüketen repo bir **commit'e** sabitlenir; yükseltme açık bir harekettir
+(`git submodule update --remote`). Yapılandırma şeması `sdlc/project.json`
+içindeki `schemaVersion` ile taşınır — harness anladığından büyük bir sürüm
+görürse durur ve "harness eski" der. Geçmiş: [CHANGELOG.md](CHANGELOG.md).
+
+```bash
+make sdlc-config    # yapılandırma alan-alan denetlenir (modelsiz)
+```
+
+Denetim, hattı **durdurmayan ama sessizce yanlış çalıştıran** şeyleri arar:
+hiçbir yolu eşleştirmeyen `changedPattern`, var olmayan yığın dizini, watch
+modunda açılan test komutu, derlenmeyen düzenli ifade, hafızaya verilmiş bir
+sır yolu. Bozuk JSON artık varsayılanlara düşmez — sesli düşer.
+
 ## Kendini sınama
 
 ```bash

@@ -87,7 +87,7 @@ if [ -n "$TARGET" ]; then
   ( cd "$TARGET" && node "$SUB/sdlc/roster.ts" --check \
       && node "$SUB/gates/chain.ts" >/dev/null \
       && node "$SUB/scripts/sdlc/workflow-dryrun.mjs" \
-      && node -e 'JSON.parse(require("fs").readFileSync("sdlc/project.json"))' )
+      && node "$SUB/sdlc/validate.ts" )
   RC=$?
   echo ""
   if [ "$RC" = "0" ]; then

@@ -782,6 +782,44 @@ else
   printf '  ✗ %s\n' "gerçek proje dosyaları genel fixture dizinine karışmış"; FAIL=$((FAIL+1))
 fi
 
+# --- Yapilandirma dogrulayicisi gercekten durduruyor mu ------------------
+# Yapilandirma harness'in TEK projeye ozgu girdisi ve uzun sure hic
+# denetlenmiyordu. Bozuk bir alan hatti durdurmaz, SESSIZCE yanlis calistirir:
+# "^./" hicbir yolu eslestirmez, o yuzden "degisen dosya yok" denir ve testler
+# "gecti" sayilir (pilot repoda olculdu 21 Eyl 2026).
+VD="$(mktemp -d)/proje"; mkdir -p "$VD/sdlc" "$VD/src"
+vcheck() { # vcheck <ad> <beklenen-rc> <json>
+  printf '%s' "$3" > "$VD/sdlc/project.json"
+  env -u SDLC_PROJECT_ROOT SDLC_PROJECT_ROOT="$VD" node "$HARNESS/sdlc/validate.ts" >/dev/null 2>&1
+  local rc=$?
+  if [ "$rc" = "$2" ]; then
+    printf '  ✓ %s\n' "yapılandırma denetimi: $1"; PASS=$((PASS+1))
+  else
+    printf '  ✗ %s (beklenen rc=%s, gelen %s)\n' "yapılandırma denetimi: $1" "$2" "$rc"; FAIL=$((FAIL+1))
+  fi
+}
+OKJSON='{"schemaVersion":1,"name":"p","stacks":[{"name":"a","root":"src","changedPattern":"^src/","testCommand":"true","soloCommand":"true"}]}'
+vcheck "sağlam yapılandırma geçer" 0 "$OKJSON"
+vcheck "bozuk JSON durdurur" 1 '{ bu json degil'
+vcheck "yığınsız yapılandırma durdurur" 1 '{"schemaVersion":1,"name":"p","stacks":[]}'
+vcheck "olmayan yığın dizini durdurur" 1 '{"schemaVersion":1,"name":"p","stacks":[{"name":"a","root":"yok","changedPattern":"^src/","testCommand":"true"}]}'
+vcheck "hiçbir yolu eşleştirmeyen desen durdurur" 1 '{"schemaVersion":1,"name":"p","stacks":[{"name":"a","root":"src","changedPattern":"^./","testCommand":"true"}]}'
+vcheck "watch modundaki test komutu durdurur" 1 '{"schemaVersion":1,"name":"p","stacks":[{"name":"a","root":"src","changedPattern":"^src/","testCommand":"vitest"}]}'
+vcheck "geçersiz düzenli ifade durdurur" 1 '{"schemaVersion":1,"name":"p","stacks":[{"name":"a","root":"src","changedPattern":"^src/","testCommand":"true","failureFilePattern":"([a-z"}]}'
+vcheck "hafızaya sır yolu vermek durdurur" 1 '{"schemaVersion":1,"name":"p","memory":{"productDocs":[".env"]},"stacks":[{"name":"a","root":"src","changedPattern":"^src/","testCommand":"true"}]}'
+vcheck "harness şemadan eskiyse durdurur" 1 '{"schemaVersion":999,"name":"p","stacks":[{"name":"a","root":"src","changedPattern":"^src/","testCommand":"true"}]}'
+rm -rf "$VD"
+
+# Bozuk yapilandirma SESSIZCE varsayilanlara dusmemeli: dusen bir hat, yigin
+# listesi bos oldugu icin hicbir sey kosmaz ve bunu kimseye soylemez.
+VD2="$(mktemp -d)/proje"; mkdir -p "$VD2/sdlc"; printf '%s' '{ bozuk' > "$VD2/sdlc/project.json"
+if env -u SDLC_PROJECT_ROOT SDLC_PROJECT_ROOT="$VD2" node "$HARNESS/sdlc/project.ts" >/dev/null 2>&1; then
+  printf '  ✗ %s\n' "bozuk yapılandırma sessizce varsayılanlara düşüyor"; FAIL=$((FAIL+1))
+else
+  printf '  ✓ %s\n' "bozuk yapılandırma sesli düşüyor, varsayılana kaçmıyor"; PASS=$((PASS+1))
+fi
+rm -rf "$VD2"
+
 echo "──────────────────────────────────────────────────────────"
 echo "$PASS geçti · $FAIL kaldı"
 [ "$FAIL" = "0" ] || exit 1

@@ -10,8 +10,9 @@
  * "crawlens" yazmaz; hepsini buradan okur. Başka bir repoya taşırken
  * değiştirilecek tek dosya `sdlc/project.json`.
  *
- * Dosya yoksa makul varsayılanlar döner: harness çalışmayı reddetmez, ama
- * ne varsaydığını söyler.
+ * Dosya YOKSA makul varsayılanlar döner: harness çalışmayı reddetmez, ama
+ * ne varsaydığını söyler. Dosya VARSA ve bozuksa döndürmez — sesli düşer.
+ * Alan-alan denetim `sdlc/validate.ts` içinde.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -74,12 +75,19 @@ const root = projectRoot();
 export function loadProject(): ProjectConfig {
   const path = `${root}/sdlc/project.json`;
   if (!existsSync(path)) return DEFAULTS;
+  // Bozuk JSON'u SESSIZCE varsayilanlara dusurmuyoruz. Dusurmek, calismayan bir
+  // hat degil YANLIS calisan bir hat uretir: yigin listesi bosalir, test fazi
+  // hicbir sey kosmaz ve kimse yapilandirmanin okunamadigini ogrenmez.
+  let raw: Partial<ProjectConfig>;
   try {
-    const raw = JSON.parse(readFileSync(path, "utf8")) as Partial<ProjectConfig>;
-    return { ...DEFAULTS, ...raw, memory: { ...DEFAULTS.memory, ...(raw.memory ?? {}) } };
-  } catch {
-    return DEFAULTS;
+    raw = JSON.parse(readFileSync(path, "utf8")) as Partial<ProjectConfig>;
+  } catch (err) {
+    throw new Error(
+      `sdlc/project.json okunamadi (${(err as Error).message})\n` +
+      `  denetlemek icin: node sdlc/validate.ts`
+    );
   }
+  return { ...DEFAULTS, ...raw, memory: { ...DEFAULTS.memory, ...(raw.memory ?? {}) } };
 }
 
 export function stackFor(changedPath: string): Stack | undefined {

@@ -65,6 +65,14 @@ jobs:
             exit 1
           fi
 
+      - name: Yapilandirma okunabilir mi (alan-alan)
+        # Yapilandirma harness'in tek projeye ozgu girdisi; bozuk bir alan hatti
+        # durdurmaz, SESSIZCE yanlis calistirir. Harness kendi reposunda proje
+        # degildir, o yuzden orada atlanir.
+        run: |
+          if [ -f sdlc/project.json ]; then node ${SDLC}sdlc/validate.ts
+          else echo "bu repoda proje yok — atlandi"; fi
+
       - name: Repoya sir girmis mi
         run: ${SDLC}scripts/sdlc/secret-scan.sh
 

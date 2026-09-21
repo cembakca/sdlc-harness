@@ -21,6 +21,7 @@ cd "$P"
 cat > sdlc/project.json <<'JSON'
 {
   "$comment": "Harness'in kendi testleri icin urettigi ORNEK proje. Gercek bir urun degil.",
+  "schemaVersion": 1,
   "name": "ornek",
   "memory": {
     "processDataset": "ornek_sdlc",
