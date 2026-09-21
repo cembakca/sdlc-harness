@@ -80,15 +80,21 @@ let audience = "customer";
 let surface = "temporal";
 let tokens = 0;
 let fromCache = false;
+let unstableTier = "";
 
 if (!isOffline()) {
   const state = readFileSync(statePath, "utf8");
-  const { answers, usage, cached } = await ask(
+  // Kademe kararinda ihtiyat = YUKARI: mechanical < standard < deep. Iki olcum
+  // ayrisirsa daha kidemli kademe kazanir (belirsizlik yukari yuvarlanir).
+  const TIER_RANK: Record<string, number> = { mechanical: 0, standard: 1, deep: 2 };
+  const { answers, usage, cached, unstable } = await ask(
     `# ${ROUTE.stateHint}\n\n${state}`,
-    [...ROUTE.questions(), ...ASSIGN_QUESTIONS]
+    [...ROUTE.questions(), ...ASSIGN_QUESTIONS],
+    { confirm: { label: (a) => ROUTE.decide(a).tier, rank: (t) => TIER_RANK[t] ?? 2 } }
   );
   tokens = usage?.input_tokens ?? 0;
   fromCache = cached === true;
+  unstableTier = unstable ? `${unstable.first}/${unstable.second}` : "";
   const routing = ROUTE.decide(answers);
   complexity = routing.tier;
   complexityReason = routing.reason;
@@ -259,6 +265,7 @@ if (roleArg) {
         measured: { complexity, audience, verification_surface: surface },
         // "0 token" ile "olculmedi" ayni sey degil: hangisi oldugu yazili olmali.
         source: isOffline() ? "offline" : fromCache ? "önbellek" : "ölçüm",
+        ...(unstableTier ? { unstable: unstableTier } : {}),
         reused: known,
         ...(tokens ? { usage: { input_tokens: tokens } } : {}),
         assignment,

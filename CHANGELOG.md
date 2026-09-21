@@ -17,6 +17,10 @@ sessizce yanlış okumaz.
 
 - `gates/cache.ts`: içerikle anahtarlanan ölçüm önbelleği (`<proje>/.sdlc-cache/`,
   git'e girmez). Kalibrasyon onu **kullanmaz** — yoksa salınım ölçülemez.
+- **Ölç, doğrula, dondur**: önbelleğe yalnızca iki ölçümde aynı kararı veren
+  girdi girer. Ayrışırsa ihtiyatlı olan seçilir, kayıt dondurulmaz ve kapı
+  insana düşer. F4-1 defteriyle: 595k → 190k input token (%68), üstüne her
+  dondurulan karar doğrulanmış.
 - Model takma adı çözülüp kaydediliyor; kalibrasyon başka bir modelle
   yapıldıysa `readiness` durdurur.
 - `jev.ts` anahtarı **proje** kökündeki `.env`'den okuyor. Önce harness köküne

@@ -95,6 +95,18 @@ export function isOffline(): boolean {
 export type Usage = { input_tokens: number; output_tokens: number };
 
 /**
+ * Bir ölçümün iki kez alınıp KARARLARININ karşılaştırılması.
+ *
+ * `label` çağıranın kendi saf karar fonksiyonudur (gate.decide / ROUTE.decide);
+ * `rank` ise kararların ihtiyat sırasıdır — büyük olan daha ihtiyatlıdır.
+ * İki ölçüm farklı karar veriyorsa ihtiyatlı olan seçilir.
+ */
+export type Confirm = {
+  label: (answers: Answers) => string;
+  rank: (label: string) => number;
+};
+
+/**
  * `opts.cache: false` ÖLÇÜMÜ ZORLAR.
  *
  * Kalibrasyon bunu kullanmak ZORUNDA: işi "aynı girdide aynı cevabı veriyor mu"
@@ -104,8 +116,15 @@ export type Usage = { input_tokens: number; output_tokens: number };
 export async function ask(
   state: string,
   questions: Question[],
-  opts: { cache?: boolean } = {}
-): Promise<{ answers: Answers; usage?: Usage; model?: string; cached?: boolean }> {
+  opts: { cache?: boolean; confirm?: Confirm } = {}
+): Promise<{
+  answers: Answers;
+  usage?: Usage;
+  model?: string;
+  cached?: boolean;
+  /** İki ölçüm farklı karar verdi: bu girdinin kararlı bir cevabı yok. */
+  unstable?: { first: string; second: string };
+}> {
   if (isOffline()) return { answers: offline(questions) };
 
   const model = conf("JEV_MODEL", DEFAULT_MODEL);
@@ -173,10 +192,53 @@ export async function ask(
   for (const [id, raw] of Object.entries(json.answers ?? {})) {
     answers[id] = fromApiAnswer(id, raw);
   }
-  if (useCache) {
-    cache.put({ at: new Date().toISOString(), model: json.model ?? model, key, answers, usage: json.usage });
+
+  // ÖLÇ, DOĞRULA, DONDUR.
+  //
+  // Önbellek ucuzluk getirdi ama yeni bir risk yarattı: sınırda duran bir ölçüm
+  // artık günlerce DONUYOR. Yazı-tura bir kez atılıp sonuç iki hafta servis
+  // edilirse, kararlılık değil kararlılık GÖRÜNTÜSÜ elde edilir.
+  //
+  // Bu yüzden önbelleğe yalnızca DOĞRULANMIŞ ölçüm girer: ıskalamada ölçüm iki
+  // kez alınır ve çağıranın KENDİ saf karar fonksiyonuyla karşılaştırılır.
+  // Karşılaştırma nokta tahmini üzerinden değil KARAR üzerinden yapılır — 2.65
+  // ile 2.72 arasındaki fark kimseyi ilgilendirmez, kararı değiştirip
+  // değiştirmediği ilgilendirir.
+  //
+  //   aynı karar  → önbelleğe girer, iş yürür
+  //   farklı karar → İHTİYATLI olan seçilir, önbelleğe GİRMEZ ve kapı bunu
+  //                  bilir (aynı girdide iki farklı ölçüm = belirsizlik)
+  //
+  // Maliyet ıskalama başınadır, çağrı başına değil: F4-1'de assign 58 kez
+  // koştu ama yalnızca birkaç ayrı girdi vardı. Doğrulamayla bile bugünkünün
+  // çok altında kalır. Kapatmak için: SDLC_GATE_CONFIRM=0.
+  let unstable: { first: string; second: string } | undefined;
+  let finalAnswers = answers;
+  let totalUsage = json.usage;
+
+  const confirmOn = useCache && opts.confirm && process.env.SDLC_GATE_CONFIRM !== "0";
+  if (confirmOn) {
+    const second = await ask(state, questions, { cache: false });
+    const l1 = opts.confirm!.label(answers);
+    const l2 = opts.confirm!.label(second.answers);
+    if (l1 !== l2) {
+      unstable = { first: l1, second: l2 };
+      // İhtiyatlı olan kazanır — belirsizlik yukarı yuvarlanır.
+      if (opts.confirm!.rank(l2) > opts.confirm!.rank(l1)) finalAnswers = second.answers;
+    }
+    if (json.usage && second.usage) {
+      totalUsage = {
+        input_tokens: json.usage.input_tokens + second.usage.input_tokens,
+        output_tokens: json.usage.output_tokens + second.usage.output_tokens,
+      };
+    }
   }
-  return { answers, usage: json.usage, model: json.model, cached: false };
+
+  // Kararsız ölçüm DONDURULMAZ: dondurmak, belirsizliği kararlılık gibi gösterir.
+  if (useCache && !unstable) {
+    cache.put({ at: new Date().toISOString(), model: json.model ?? model, key, answers: finalAnswers, usage: totalUsage });
+  }
+  return { answers: finalAnswers, usage: totalUsage, model: json.model, cached: false, unstable };
 }
 
 function toApiQuestion(q: Question): Record<string, unknown> {

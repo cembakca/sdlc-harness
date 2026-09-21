@@ -61,8 +61,26 @@ if (gate.wantsProjectContext) {
   }
 }
 
-const { answers, usage, model, cached } = await ask(`# ${gate.stateHint}\n\n${state}`, gate.questions);
-const result = gate.decide(answers, state);
+// Dogrulama kapinin KENDI karar fonksiyonuyla yapilir: iki olcumun nokta
+// tahminleri degil, KARARLARI karsilastirilir. Ihtiyat sirasi: pass < human < block.
+const RANK: Record<string, number> = { pass: 0, human: 1, block: 2 };
+const { answers, usage, model, cached, unstable } = await ask(
+  `# ${gate.stateHint}\n\n${state}`,
+  gate.questions,
+  { confirm: { label: (a) => gate.decide(a, state).decision, rank: (d) => RANK[d] ?? 1 } }
+);
+const measured = gate.decide(answers, state);
+
+// AYNI GIRDIDE IKI FARKLI OLCUM = BELIRSIZLIK. Kapinin zaten dusuk confidence
+// icin yaptigi sey: insana dusur. Ihtiyatlisi secilmis olsa bile "pass" kalmasi
+// yanlis olurdu — kapi o girdide kendi kararini tekrar edemiyor.
+const result = unstable && measured.decision === "pass"
+  ? {
+      ...measured,
+      decision: "human" as const,
+      reason: `ölçüm kararsız: aynı girdi iki ölçümde "${unstable.first}" ve "${unstable.second}" okudu`,
+    }
+  : measured;
 
 // Karar deftere düşer: hangi kapı neyi durdurdu, hangi sayıyla.
 // Belgenin surumu karara yazilir: eskalasyon "bu TICKET'ta kac blok" degil
@@ -103,6 +121,7 @@ record({
     ),
     ...(result.derived ?? {}),
     ...(artifactHash ? { artifactHash } : {}),
+    ...(unstable ? { unstable: `${unstable.first}/${unstable.second}` } : {}),
     ...(headSha ? { headSha } : {}),
   },
 });
@@ -116,7 +135,7 @@ console.log(
         ? "offline (no JEV_API_KEY — every gate falls to a human)"
         // Onbellekten okundugunu SOYLEMEK zorundayiz: "0 token" ile "olculmedi"
         // ayni sey degil, ve hangisi oldugunu okuyan bilmeli.
-        : `jev (${model ?? "?"})${cached ? " · önbellekten" : ""}`,
+        : `jev (${model ?? "?"})${cached ? " · önbellekten" : ""}${unstable ? " · KARARSIZ (dondurulmadı)" : ""}`,
       ...(usage ? { usage } : {}),
       ...result,
       answers,

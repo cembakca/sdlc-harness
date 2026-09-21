@@ -834,6 +834,32 @@ else
 fi
 rm -rf "$MD"
 
+# --- Olc, dogrula, dondur ------------------------------------------------
+# Onbellek ucuzluk getirdi ama yeni bir risk yaratti: sinirda duran bir olcum
+# artik gunlerce DONUYOR. Yazi-tura bir kez atilip sonuc iki hafta servis
+# edilirse kararlilik degil, kararlilik GORUNTUSU elde edilir.
+# Senaryo yerinde bir HTTP sunucusuyla kosar: gercek model cagrisi yok, o yuzden
+# kararsizlik senaryosu bedava ve yeniden uretilebilir.
+if CF_OUT="$(env -u SDLC_PROJECT_ROOT -u JEV_API_KEY -u JEV_API_URL -u SDLC_GATE_CONFIRM \
+      node "$HARNESS/fixtures/confirm-freeze.mjs" "$HARNESS" 2>&1)"; then
+  printf '  ✓ %s\n' "kararsız ölçüm dondurulmuyor, ihtiyatlısı seçiliyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "ölç-doğrula-dondur bozuk:"; FAIL=$((FAIL+1))
+  printf '%s\n' "$CF_OUT" | sed 's/^/      /'
+fi
+
+# Kapilar bu sinyali KULLANMALI: kararsiz bir olcumde "pass" kalmak, kapinin
+# kendi kararini tekrar edemedigi girdiyi sessizce gecirmektir.
+CF_MISS=""
+grep -q 'unstable' "$HARNESS/gates/evaluate.ts" || CF_MISS="$CF_MISS evaluate.ts"
+grep -q 'confirm:' "$HARNESS/gates/evaluate.ts" || CF_MISS="$CF_MISS evaluate.ts(confirm)"
+grep -q 'confirm:' "$HARNESS/gates/assign.ts" || CF_MISS="$CF_MISS assign.ts(confirm)"
+if [ -z "${CF_MISS// /}" ]; then
+  printf '  ✓ %s\n' "kapılar kararsızlık sinyalini kullanıyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "kararsızlık sinyali kullanılmıyor:$CF_MISS"; FAIL=$((FAIL+1))
+fi
+
 # --- Anahtar PROJEDE aranmali, harness'ta degil -------------------------
 # jev.ts .env'i "bu dosyanin bir ustu" diye ariyordu. Harness submodule'e
 # cikinca orasi proje koku olmaktan cikti ve HER KAPI sessizce offline'a dustu

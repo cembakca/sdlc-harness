@@ -86,6 +86,37 @@ belge, sorular ve modelin o anki karşılığı. Üçünden biri değişirse kay
 kendiliğinden geçersizdir; ayrıca bir yaş sınırı vardır
 (`SDLC_GATE_CACHE_TTL_DAYS`, varsayılan 14).
 
+### Ölç, doğrula, dondur
+
+Önbellek ucuzluk getirir ama kendi riskini yaratır: sınırda duran bir ölçüm
+artık **günlerce donar**. Yazı-tura bir kez atılıp sonuç iki hafta servis
+edilirse, kararlılık değil kararlılık *görüntüsü* elde edilir.
+
+Bu yüzden önbelleğe yalnızca **doğrulanmış** ölçüm girer. Iskalamada ölçüm iki
+kez alınır ve çağıranın **kendi saf karar fonksiyonuyla** karşılaştırılır —
+nokta tahminleri değil, KARARLAR. (2.65 ile 2.72 arasındaki fark kimseyi
+ilgilendirmez; kararı değiştirip değiştirmediği ilgilendirir.)
+
+| iki ölçüm | ne olur |
+|---|---|
+| aynı kararı veriyor | önbelleğe girer, iş yürür |
+| farklı karar veriyor | **ihtiyatlı** olan seçilir, önbelleğe **girmez**, kapı insana düşer |
+
+Aynı girdide iki farklı ölçüm belirsizliktir — kapının düşük confidence'ta
+zaten yaptığı şey: insana düşür. İhtiyat sırası kapıda `pass < human < block`,
+kademede `mechanical < standard < deep`.
+
+Maliyet **ıskalama başınadır, çağrı başına değil**. F4-1'in gerçek defteriyle:
+
+| | input token | maliyet |
+|---|---|---|
+| bugünkü hâli (önbelleksiz) | 595.068 | $0.0250 |
+| yalnızca önbellek | 94.997 | $0.0040 |
+| önbellek + doğrulama | **189.994** | **$0.0080** |
+
+Yani doğrulama dahil **%68 daha ucuz**, üstüne dondurulan her karar iki kez
+ölçülmüş oluyor. Kapatmak için `SDLC_GATE_CONFIRM=0`.
+
 **Nerede susması gerekir:** kalibrasyon. İşi tam da "aynı girdide aynı cevabı
 veriyor mu" diye sormak; önbellekten okursa `flapping: 0` her zaman doğru çıkar
 ve kontrol boş bir güvenceye dönüşür — `repeats: 1` hatasının aynısı, başka
