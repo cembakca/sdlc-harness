@@ -34,12 +34,15 @@ jobs:
           node-version: "22"
 
       - name: Harness nerede (ayni dosya iki duzende de kossun)
-        # Harness kendi reposunda ROOT'un kendisidir; tuketen repoda submodule
-        # olarak sdlc-harness/ altindadir. Yollari sabitlemek, bu dosyanin iki
-        # kopyasini ayristirir — tek kaynak olmaktan cikar.
+        # Yollari sabitlemek bu dosyanin iki kopyasini ayristirir.
+        #   tuketen repo : proje ROOT'tur, harness sdlc-harness/ altindadir
+        #   harness repo : harness ROOT'tur ve PROJE YOKTUR
+        # if/fi, "&&" degil: GitHub bash'i -e ile kosar ve dizin yokken
+        # basarisiz bir && listesi adimi dusurur.
         run: |
-          if [ -d sdlc-harness/gates ]; then echo "SDLC=sdlc-harness/" >> "$GITHUB_ENV"
-          else echo "SDLC=" >> "$GITHUB_ENV"; fi
+          SUB=""
+          if [ -d sdlc-harness/gates ]; then SUB="sdlc-harness/"; fi
+          echo "SDLC=$SUB" >> "$GITHUB_ENV"
 
       - name: Kadro kurallari (kodu yazan kendi kodunu denetlemesin)
         run: node ${SDLC}sdlc/roster.ts --check
@@ -72,7 +75,20 @@ jobs:
         run: node ${SDLC}scripts/sdlc/workflow-dryrun.mjs
 
       - name: Durdurucular gercekten durduruyor mu (regresyon)
-        run: ${SDLC}scripts/sdlc/selftest.sh
+        # Selftest bir PROJE uzerinde kosar; harness kendi reposunda proje
+        # degildir ve yapilandirmaya bakan kontroller "gecersiz JSON" diye
+        # duser (olculdu 22 Eyl 2026: 78'den 75). O zaman ornek proje uretilir.
+        #
+        # SDLC_PROJECT_ROOT YALNIZCA BU ADIMA verilir. Ise yarar gorunup
+        # tehlikeli olan sey global yapmakti: sir taramasi o zaman harness'i
+        # degil bos ornek projeyi tarar ve "temiz" der — agents.env'i kacirmis
+        # olan hatanin ta kendisi.
+        run: |
+          if [ -f sdlc/project.json ]; then
+            ${SDLC}scripts/sdlc/selftest.sh
+          else
+            SDLC_PROJECT_ROOT="$(${SDLC}fixtures/make-project.sh)" ${SDLC}scripts/sdlc/selftest.sh
+          fi
 
       - name: Ticket dali mi, degilse burada bitir
         id: ticket
