@@ -41,6 +41,25 @@ step() { # step <ad> <beklenen-cikis-kodlari-virgullu> <komut...>
   fi
 }
 
+# Cikis kodu anlamli olmayan komutlar icin: rapor uretildi mi.
+report() { # report <ad> <beklenen-metin> <komut...>
+  local name="$1" needle="$2"; shift 2
+  local out
+  out="$("$@" 2>&1)"
+  if printf '%s' "$out" | grep -q "$needle"; then
+    printf '    ✓ %s\n' "$name"
+  else
+    printf '    ✗ %s — raporda "%s" yok\n' "$name" "$needle"
+    printf '%s\n' "$out" | tail -6 | sed 's/^/        /'
+    FAILS=$((FAILS+1))
+  fi
+  if printf '%s' "$out" | grep -q 'ERR_MODULE_NOT_FOUND'; then
+    printf '    ✗ %s — KOK KARISMASI\n' "$name"
+    printf '%s\n' "$out" | grep -m2 "Cannot find" | sed 's/^/        /'
+    FAILS=$((FAILS+1))
+  fi
+}
+
 # Harness'in YEREL klonu: ag yok, calisma agacindaki hali sinanir.
 BARE="$WORK/harness.git"
 git clone -q --local "$HARNESS" "$BARE" 2>/dev/null || {
@@ -124,7 +143,10 @@ step "commit disiplini"                 "0,1,20" "$S/commit-lint.sh" "$T"
 step "test fazi"                        "0,1,20" "$S/test.sh" "$T"
 step "postbuild"                        "0,10,20" node sdlc-harness/gates/postbuild.ts "$T"
 step "teslim hazirligi"                 "0,20"  node sdlc-harness/gates/readiness.ts "$T"
-step "doctor"                           "0,20"  "$S/doctor.sh" "$T"
+# doctor'in cikis kodu KRITIK SAYISIDIR: ciplak bir CI runner'inda .venv ve
+# codex gercekten eksiktir ve bunu soylemesi DOGRUDUR. Burada olculen sey ortam
+# butunlugu degil, komutun ayakta olup raporunu uretebilmesi.
+report "doctor (rapor uretiyor mu)" "doctor:" "$S/doctor.sh" "$T"
 step "olcum ozeti"                      "0,1,20" "$S/measure.sh" "$T" plan-stage
 step "worktree temizligi"               "0,20"  bash "$S/worktree-clean.sh" "$T"
 step "teslim kapisi (durmali)"          "20"    "$S/land.sh" "$T"
