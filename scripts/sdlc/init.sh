@@ -109,6 +109,8 @@ if [ -n "$TARGET" ]; then
 fi
 
 OUT="$ROOT/sdlc/project.json"
+# Harness ayri repoda: hedefte sdlc/ dizini hic olmayabilir.
+mkdir -p "$ROOT/sdlc"
 [ -f "$OUT" ] && [ -z "$FORCE" ] && { echo "zaten var: $OUT (--force ile uzerine yaz)"; exit 0; }
 
 NAME="$(basename "$ROOT")"
