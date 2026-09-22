@@ -44,7 +44,7 @@ const ticket = argv.shift();
 //
 // --force bir BAYRAK DEGIL, kayittir: gerekcesiz kabul edilmiyor ve deftere
 // "flow:force" satiri olarak dusuyor. Kapi onaylariyla ayni mantik.
-const FLAGS = ["--spec-only", "--replan"];
+const FLAGS = ["--spec-only", "--replan", "--skip-build"];
 let force = "";
 let maxRounds;
 let maxSpecRounds;
@@ -59,7 +59,7 @@ for (const arg of argv) {
 }
 if (!ticket || rest.some((arg) => !FLAGS.includes(arg))) {
   console.error(
-    "usage: node scripts/sdlc/orchestrate.mjs <TICKET> [--spec-only] [--replan]\n" +
+    "usage: node scripts/sdlc/orchestrate.mjs <TICKET> [--spec-only] [--replan] [--skip-build]\n" +
     "                                        [--force=\"<gerekce>\"] [--max-rounds=N] [--max-spec-rounds=N]"
   );
   process.exit(2);
@@ -291,6 +291,7 @@ try {
       ticket,
       specOnly: argv.includes("--spec-only"),
       replan: argv.includes("--replan"),
+      skipBuild: argv.includes("--skip-build"),
       force: force ? true : undefined,
       ...(maxRounds !== undefined ? { maxRounds } : {}),
       ...(maxSpecRounds !== undefined ? { maxSpecRounds } : {}),

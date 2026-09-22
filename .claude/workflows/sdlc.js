@@ -494,7 +494,16 @@ log(`build Codex'e devrediliyor (izole worktree, kademe: ${rAnalysis.tier})`);
 // kararini bir cokmeye cevirirdi — oysa akisin devaminda zaten onay araniyor
 // (olculdu 22 Eyl 2026: sekiz gorev de bitti, testler yesildi, kapi yalnizca
 // plandaki bir test dosyasini diff'te goremedigi icin insana dustu).
-const build = await command("scripts/sdlc/codex-build.sh", [ticket], [0, 10, 20]);
+// BUILD'I ATLAMAK: bir tur 15-22 dakika ve buyuk kismi Codex. Denetci cokup
+// ya da bozuk cikti donduren bir kosuyu tekrarlarken kapatilacak hicbir sey
+// yokken TAM bir Codex turu odeniyordu (olculdu 22 Eyl 2026, M1: ust uste uc
+// kosu yalnizca review icin yapildi ve ucu de once build kostu).
+// --skip-build faz isaretini ATLAMAZ: zincir yine yurur, yalnizca Codex
+// cagrilmaz ve diff mevcut worktree'den okunur.
+const build = a.skipBuild
+  ? { code: 0, stdout: (await command("scripts/sdlc/review-scope.sh", [ticket, "--patch"])).stdout }
+  : await command("scripts/sdlc/codex-build.sh", [ticket], [0, 10, 20]);
+if (a.skipBuild) log("build atlandi (--skip-build): mevcut worktree diff'i kullaniliyor");
 if (build.code >= 20) {
   return {
     ticket,

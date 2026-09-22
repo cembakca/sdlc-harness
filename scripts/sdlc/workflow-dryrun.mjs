@@ -164,6 +164,13 @@ async function run(name, scenario) {
 
 const SCENARIOS = [
   {
+    // --skip-build: zincir yine yurur ama Codex cagrilmaz. Denetciyi tekrar
+    // kosturmak icin tam bir build turu odemek, tur basina dakikalar demek.
+    name: "--skip-build → zincir yürür ama Codex çağrılmaz",
+    scenario: { args: { ticket: "DRYRUN-1", skipBuild: true } },
+    expect: (r) => r.phases.includes("build") && !r.seen.includes("build"),
+  },
+  {
     // Cikis 10 = INSANA dus, "build uymadi" degil. Postbuild kapisi insana
     // dustugunde akis onay ariyor; erken donus bunu cokmeye cevirmemeli.
     name: "build bitti ama postbuild insana düştü → onay aranır, çökme yok",
