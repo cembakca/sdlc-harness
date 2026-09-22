@@ -33,7 +33,11 @@ const GENERIC_CASES: (GateCase | RouteCase)[] = [
   { kind: "gate", gate: "spec", fixture: "spec-tight.md", expect: "pass",
     because: "ölçülebilir EARS kriterleri, açık kapsam dışı, açık soru yok" },
   { kind: "gate", gate: "spec", fixture: "spec-minimal-good.md", expect: "pass",
-    because: "küçük ama kesin: üç kriter de tek başına test edilebilir" },
+    because: "küçük ama kesin: beş kriterin her biri tek başına test edilebilir. " +
+      "AC-3 22 Eyl 2026'da bölündü ve sonundaki 'as it does today' kaldırıldı — o ifade " +
+      "test edenin bilmediği bir doğruluk kaynağına atıftı (0.59 aldı) ve kriter aynı " +
+      "cümlede iki ayrı iddiada bulunuyordu. Fixture'ın kendi etiketi de 'üç kriter' " +
+      "diyordu; dosyada dört vardı." },
   { kind: "gate", gate: "spec", fixture: "spec-vague.md", expect: "block",
     because: '"daha alakalı olmalı", "temiz görünmeli" — test edilemez' },
   { kind: "gate", gate: "spec", fixture: "spec-open-questions.md", expect: "block",
