@@ -471,8 +471,13 @@ log(`build Codex'e devrediliyor (izole worktree, kademe: ${rAnalysis.tier})`);
 // var. Cikis kodunu allowed'a almazsak `command()` ham Error firlatiyor ve
 // kosu yigin iziyle oluyor — kapi kararlarinin urettigi yapisal durusun
 // yerine cokme geciyor (olculdu 22 Eyl 2026, M1'in build fazinda).
-const build = await command("scripts/sdlc/codex-build.sh", [ticket], [0, 20]);
-if (build.code !== 0) {
+// Cikis kodlari hattin her yerinde ayni anlami tasir: 0 gec, 10 INSANA dus,
+// 20 durdur. 10'u "build uymadi" saymak, postbuild kapisinin insana dusen
+// kararini bir cokmeye cevirirdi — oysa akisin devaminda zaten onay araniyor
+// (olculdu 22 Eyl 2026: sekiz gorev de bitti, testler yesildi, kapi yalnizca
+// plandaki bir test dosyasini diff'te goremedigi icin insana dustu).
+const build = await command("scripts/sdlc/codex-build.sh", [ticket], [0, 10, 20]);
+if (build.code >= 20) {
   return {
     ticket,
     stoppedAt: "build",

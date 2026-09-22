@@ -136,7 +136,10 @@ function makeCommand(scenario, seen) {
     if (name === "readiness.ts") return { stdout: scenario.ready === false ? "HAZIR DEĞİL" : "HAZIR", code: scenario.ready === false ? 20 : 0 };
     if (name === "test.sh") return { stdout: scenario.testFail ? "sonuc: fail" : "sonuc: pass", code: scenario.testFail ? 20 : 0 };
     if (name === "merge-check.sh") return { stdout: scenario.mergeFail ? "ÇAKIŞMA" : "birleşme temiz", code: scenario.mergeFail ? 20 : 0 };
-    if (name === "codex-build.sh") return { stdout: scenario.buildFail ? "BUILD PLANA UYMUYOR" : "diff --git a/x b/x\n+ok\n", code: scenario.buildFail ? 20 : 0 };
+    if (name === "codex-build.sh") {
+      const code = scenario.buildFail ? 20 : scenario.buildHuman ? 10 : 0;
+      return { stdout: code === 20 ? "BUILD PLANA UYMUYOR" : "diff --git a/x b/x\n+ok\n", code };
+    }
     return { stdout: `dry-run çıktısı (${label})`, code: 0 };
   };
 }
@@ -160,6 +163,16 @@ async function run(name, scenario) {
 }
 
 const SCENARIOS = [
+  {
+    // Cikis 10 = INSANA dus, "build uymadi" degil. Postbuild kapisi insana
+    // dustugunde akis onay ariyor; erken donus bunu cokmeye cevirmemeli.
+    name: "build bitti ama postbuild insana düştü → onay aranır, çökme yok",
+    scenario: { buildHuman: true, gates: { postbuild: "human" }, approved: false },
+    expect: (r) =>
+      r.result?.stoppedAt !== "build" &&
+      !r.seen.includes("review") &&
+      typeof r.result?.next === "string",
+  },
   {
     // Build'in plana uymamasi BEKLENEN bir sonuc; cokme degil yapisal durus
     // uretmeli, yoksa onarim dongusu hic baslamaz.
