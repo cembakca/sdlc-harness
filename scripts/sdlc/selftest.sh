@@ -919,6 +919,31 @@ else
 fi
 rm -rf "$LK"
 
+# --- Plandaki dosya yollari TAM eslesmeli --------------------------------
+# postbuild kapisi plandaki test dosyalarini duzenli ifadeyle cikariyor ve
+# uzanti alternatifi "(py|ts|tsx|js)" sirasiyla yaziliydi: sirali denendigi ve
+# sonu sinirlanmadigi icin ".test.tsx" ".ts"te kesiliyor, sondaki "x" dusuyordu.
+# Kapi o zaman diff'te DURAN bir dosyayi "yok" sayiyor ve temiz bir build'i
+# insana dusuruyordu (olculdu 22 Eyl 2026, M1: problems bos, tek uyari yanlis
+# eslesmeydi). Yanlis bir insan kapisi, kapiya olan guveni asindirir.
+PB_OUT="$(env -u SDLC_PROJECT_ROOT node --input-type=module -e '
+import { readFileSync } from "node:fs";
+const src = readFileSync(process.argv[1] + "/gates/postbuild.ts", "utf8");
+const m = src.match(/matchAll\((\/[^\n]*?\/g)\)/);
+if (!m) { console.log("desen bulunamadi"); process.exit(0); }
+const re = new RegExp(m[1].slice(1, -2), "g");
+const sample = "`client/tests/unit/pages/a.test.tsx` `server/tests/b.py` `client/tests/c.test.ts` `x/tests/d.jsx`";
+const got = [...sample.matchAll(re)].map((x) => x[1]);
+const want = ["client/tests/unit/pages/a.test.tsx", "server/tests/b.py", "client/tests/c.test.ts", "x/tests/d.jsx"];
+const bad = want.filter((w) => !got.includes(w));
+console.log(bad.length ? "eslesmedi: " + bad.join(", ") : "");
+' "$HARNESS" 2>&1)"
+if [ -z "$PB_OUT" ]; then
+  printf '  ✓ %s\n' "plandaki test yolları uzantıyla birlikte tam eşleşiyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "postbuild dosya deseni bozuk — $PB_OUT"; FAIL=$((FAIL+1))
+fi
+
 # --- Cikis kodu sozlesmesi -----------------------------------------------
 # Cikis kodlari hattin her yerinde anlam tasiyor ama hicbir yerde yazili
 # degildi: her cagiran kendi izin listesini ELLE yaziyordu. Bir kod atlaninca

@@ -167,7 +167,13 @@ if (unplanned.length) {
 // 3. Test şartı: done-when bir test dosyasından bahsediyorsa o dosya diff'te olmalı
 const testPathsInPlan = new Set<string>();
 for (const { text } of doneWhen) {
-  for (const m of text.matchAll(/`?([\w./-]*tests?\/[\w./-]+\.(py|ts|tsx|js))`?/g)) {
+  // UZANTI SIRASI VE SINIR. Once "(py|ts|tsx|js)" yaziliydi: alternatif sirali
+  // denendigi ve sonu sinirlanmadigi icin "public-report-summary.test.tsx"
+  // ".ts"te kesiliyor, sondaki "x" dusuyordu. Kapi o zaman diff'te DURAN bir
+  // dosyayi "yok" sayip temiz bir build'i insana dusurdu (olculdu 22 Eyl 2026,
+  // M1'de: problems bos, tek uyari bu yanlis eslesmeydi).
+  // Uzun alternatif once, ve (?![\w]) ile uzanti ortasinda duramasin.
+  for (const m of text.matchAll(/`?([\w./-]*tests?\/[\w./-]+\.(py|tsx|ts|jsx|js))(?![\w])`?/g)) {
     testPathsInPlan.add(m[1]);
   }
 }
