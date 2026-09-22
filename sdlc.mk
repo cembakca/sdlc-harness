@@ -87,8 +87,8 @@ sdlc-selftest: ## Durdurucular gercekten durduruyor mu (kasitli kirmizi senaryol
 	@$(SDLC)scripts/sdlc/selftest.sh
 
 ## --- build, test, teslim
-sdlc-orchestrate: ## Bagimsiz orkestrator: make sdlc-orchestrate TICKET=HKA-123 [FLAGS=--spec-only]
-	@node $(SDLC)scripts/sdlc/orchestrate.mjs $(TICKET) $(FLAGS)
+sdlc-orchestrate: ## Bagimsiz orkestrator: TICKET=X [FLAGS=--spec-only] [WHY="devre kesiciyi atlama gerekcesi"]
+	@node $(SDLC)scripts/sdlc/orchestrate.mjs $(TICKET) $(FLAGS) $(if $(WHY),--force="$(WHY)",)
 
 sdlc-run: ## Kod tarafindaki omurga (kismi operator yardimcisi): make sdlc-run TICKET=F4-1
 	@$(SDLC)scripts/sdlc/run.sh $(TICKET)
