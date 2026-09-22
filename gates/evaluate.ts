@@ -82,7 +82,9 @@ if (GATE_PHASE[gate.name]) requireEntry(ticketOf(artifactPath), GATE_PHASE[gate.
 
 const { answers, usage, model, cached, unstable } = await ask(
   `# ${gate.stateHint}\n\n${state}`,
-  gate.questions,
+  // Sorular sabit ya da state'ten tureyen olabilir (spec kapisi: kriter basina
+  // bir soru). Ayni liste confirm turunda da kullanilir.
+  typeof gate.questions === "function" ? gate.questions(state) : gate.questions,
   { confirm: { label: (a) => gate.decide(a, state).decision, rank: (d) => RANK[d] ?? 1 } }
 );
 const measured = gate.decide(answers, state);
@@ -132,8 +134,14 @@ record({
   model,
   tokens: usage?.input_tokens,
   measures: {
+    // Kriter basina cevaplar (`ac_*`) deftere TEK TEK yazilmaz: 44 maddelik bir
+    // spec her olcumde 44 alan birakirdi ve defter okunamaz hale gelirdi.
+    // Ozetleri `derived` tasiyor (kac kriter, kaci zayif, ortalama); tek tek
+    // puanlar icin gates/diagnose.ts var.
     ...Object.fromEntries(
-      Object.values(answers).map((a) => [a.id, typeof a.value === "number" ? a.value : String(a.value)])
+      Object.values(answers)
+        .filter((a) => !/^ac_\d/.test(a.id))
+        .map((a) => [a.id, typeof a.value === "number" ? a.value : String(a.value)])
     ),
     ...(result.derived ?? {}),
     ...(artifactHash ? { artifactHash } : {}),

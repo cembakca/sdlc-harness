@@ -64,7 +64,10 @@ for (const row of journalRowsAll) {
 const num = (v: unknown, fallback: number) => (typeof v === "number" ? v : fallback);
 const known = {
   ambiguity: num(latest.spec?.measures.ambiguity, NaN),
-  testable: num(latest.spec?.measures.testable, NaN),
+  // `testableMean` yeni olcum (kriter basina puanlarin ortalamasi); `testable`
+  // eski satirlarda tek bir toplam puandi. Eski biletlerin sinyali kaybolmasin
+  // diye ikisi de okunur.
+  testable: num(latest.spec?.measures.testableMean, num(latest.spec?.measures.testable, NaN)),
   radius: String(latest.blast?.measures.radius ?? ""),
   reversible: num(latest.blast?.measures.reversible, NaN),
   severity: num(latest.review?.measures.severity, NaN),

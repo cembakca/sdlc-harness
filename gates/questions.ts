@@ -30,6 +30,8 @@ export type Question =
   | { id: string; kind: "choice"; prompt: string; criteria: Record<string, string> }
   | { id: string; kind: "score"; prompt: string; criteria: string[] };
 
+import { extractCriteria, questionIdOf } from "./criteria.ts";
+
 export type GateName = "spec" | "scope" | "blast" | "review";
 
 export type Gate = {
@@ -44,7 +46,11 @@ export type Gate = {
   prepare?: (state: string) => string;
   /** true ise ürün hafızasından ilgili geçmiş çekilip state'e eklenir. */
   wantsProjectContext?: boolean;
-  questions: Question[];
+  /**
+   * Sabit liste ya da state'ten TUREYEN liste. Spec kapisi ikincisini kullanir:
+   * her kabul kriteri icin ayri bir soru uretir (bkz. asagidaki gerekce).
+   */
+  questions: Question[] | ((state: string) => Question[]);
   /** Sonuçları karara çeviren saf fonksiyon. Eşikler THRESHOLDS'tan gelir. */
   /** `prepared`: prepare() ciktisi — koddan olculen olgular. Kod karar verirken
    *  modelin guvenine degil buna bakar (bkz. blast kapisi). */
@@ -83,7 +89,30 @@ export const THRESHOLDS = {
    * sıkı örneğe yakın duruyor ve bilerek öyle bırakıldı — kriterlerin
    * ölçülebilirliği pipeline'ın geri kalanının dayandığı tek şey.
    */
-  specTestable: 0.8,
+  /**
+   * BIR KRITERIN dogrulanabilirlik tabani. Spec'in TAMAMI icin degil.
+   *
+   * Eskiden tek bir soru vardi: "Every acceptance criterion in this spec is
+   * objectively verifiable" — yani N maddenin TUMU uzerinde tek bir olasilik.
+   * Bu, madde sayisiyla yapisal olarak coker: baglaç ne kadar uzunsa olasilik o
+   * kadar dusuk. Esik 0.80, kalibrasyon fixture'lari uzerinde ayarlanmisti ve o
+   * fixture'lar DORT maddelik (955 bayt). Gercek spec'ler oyle degil: F4-1 15
+   * madde, M1 44 madde (olculdu 22 Eyl 2026).
+   *
+   * Sonuc: kapi TITIZLIGI cezalandiriyordu. M1'in ilk turunda bilesik maddeleri
+   * bolmesi istendi — dogru spec pratigi — ve bolme madde sayisini 18'den 44'e
+   * cikardi; madde KALITESI yukseldigi halde toplam olcum 0.51'den yalnizca
+   * 0.59'a gelebildi ve kapi yine durdurdu.
+   *
+   * Artik her kriter AYRI olculuyor ve bu taban her birine uygulaniyor: 44
+   * maddelik bir spec, 4 maddelik bir spec kadar gecebilir. 0.60 uydurma bir
+   * sayi degil; gates/diagnose.ts insana zaten bu esikle "dogrulanabilir degil"
+   * diyordu (< 0.6 kirmizi, < 0.8 sari).
+   *
+   * Ayni hastalik `ambiguity` icin bir kez tedavi edilmisti (karar nokta
+   * tahminine degil kutleye baglandi); `testable` o ilaci almamisti.
+   */
+  specCriterionMin: 0.6,
   /**
    * Belirsizlik kararı NOKTA TAHMİNİNE değil OLASILIK KÜTLESİNE bakar:
    * "bu spec'in tasarımı değiştirecek boşluk taşıma olasılığı" (seviye ≥ 3).
@@ -142,18 +171,22 @@ export const GATES: Record<GateName, Gate> = {
   spec: {
     name: "spec",
     stateHint: "The full text of spec.md (English).",
-    questions: [
-      {
-        id: "testable",
-        kind: "noul",
+    // Kod ne sayabiliyorsa kod sayar: kriter sayisi modele sorulmaz.
+    prepare: (state) => `ACCEPTANCE_CRITERIA_COUNT: ${extractCriteria(state).length}\n\n${state}`,
+    questions: (state) => [
+      // HER KRITER AYRI SORU. Tek bir "hepsi dogrulanabilir mi" sorusu, madde
+      // sayisiyla coken bir baglacti (bkz. THRESHOLDS.specCriterionMin).
+      ...extractCriteria(state).map((c) => ({
+        id: questionIdOf(c.id),
+        kind: "noul" as const,
         prompt:
-          "Every acceptance criterion in this spec is objectively verifiable: a tester " +
-          "could decide pass/fail without asking the author.",
+          `This acceptance criterion is objectively verifiable: a tester could decide ` +
+          `pass/fail from it alone, without asking the author what was meant.\n\n${c.id}: ${c.body}`,
         criteria: {
-          true: "Each criterion names an observable trigger and an observable outcome, or a measurable number.",
-          false: "At least one criterion is a matter of taste, or uses words like fast, clean, robust, user-friendly with no number behind them.",
+          true: "It names an observable trigger and an observable outcome, or an exact value, field, call or number.",
+          false: "It leaves a judgement call open: an undefined term, an unstated source of truth, or a quality word with no number behind it.",
         },
-      },
+      })),
       {
         id: "ambiguity",
         kind: "score",
@@ -179,16 +212,41 @@ export const GATES: Record<GateName, Gate> = {
         },
       },
     ],
-    decide: (a) => {
+    decide: (a, prepared) => {
       // Not: ambiguity bir score sorusu ve kararı kütleye bağlı, o yüzden
       // confidence kontrolünün dışında — nokta tahmininin confidence'ı
       // kalibrasyonda eşiğin dibinde salınıyordu.
-      const low = lowConfidence(a, ["testable", "scope"]);
+      const low = lowConfidence(a, ["scope"]);
       if (low) return { decision: "human", reason: `low confidence on: ${low}` };
-      if (num(a.testable) < THRESHOLDS.specTestable)
+
+      // Kriter cevaplari `ac_*`; digerleri (ambiguity, scope) disarida kalir.
+      const acs = Object.values(a).filter((x) => /^ac_\d/.test(x.id));
+      const weak = acs.filter((x) => num(x) < THRESHOLDS.specCriterionMin);
+      const mean = acs.length ? acs.reduce((t, x) => t + num(x), 0) / acs.length : 1;
+      const derived = {
+        criteria: acs.length,
+        weak: weak.length,
+        testableMean: Number(mean.toFixed(2)),
+      };
+      if (!acs.length)
         return {
           decision: "block",
-          reason: `acceptance criteria not verifiable (${num(a.testable).toFixed(2)} < ${THRESHOLDS.specTestable})`,
+          reason: "no acceptance criteria found — expected a '## Acceptance criteria' section with numbered items",
+          derived,
+        };
+      if (weak.length)
+        return {
+          decision: "block",
+          // Gerekce EYLEME DONUSMELI: hangi madde, hangi puan.
+          reason:
+            `${weak.length}/${acs.length} acceptance criteria are not verifiable ` +
+            `(< ${THRESHOLDS.specCriterionMin}): ` +
+            weak
+              .sort((x, y) => num(x) - num(y))
+              .slice(0, 8)
+              .map((x) => `${x.id.toUpperCase().replace("_", "-")} ${num(x).toFixed(2)}`)
+              .join(", ") + (weak.length > 8 ? ", …" : ""),
+          derived,
         };
       const risk = massAtOrAbove(a.ambiguity, 4);
       if (risk > THRESHOLDS.specAmbiguityRiskMax)
@@ -197,10 +255,15 @@ export const GATES: Record<GateName, Gate> = {
           reason:
             `spec risks contradictions / unimplementable criteria with probability ${risk.toFixed(2)} ` +
             `(> ${THRESHOLDS.specAmbiguityRiskMax}) — answer the open questions first`,
+          derived,
         };
       if (num(a.scope) < 0.6)
-        return { decision: "human", reason: "scope boundaries unclear or change set too large" };
-      return { decision: "pass", reason: "spec is testable and bounded" };
+        return { decision: "human", reason: "scope boundaries unclear or change set too large", derived };
+      return {
+        decision: "pass",
+        reason: `spec is testable and bounded (${derived.criteria} criteria, mean ${derived.testableMean})`,
+        derived,
+      };
     },
   },
 

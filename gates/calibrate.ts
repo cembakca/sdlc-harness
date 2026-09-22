@@ -201,7 +201,7 @@ async function runOnce(c: GateCase | RouteCase): Promise<{ verdict: string; deta
   // "wrong: 0" hicbir sey soylemez.
   const prepared = gate.prepare ? gate.prepare(state) : state;
   // ONBELLEK KAPALI — yukaridaki gerekce.
-  const { answers, usage, model } = await ask(`# ${gate.stateHint}\n\n${prepared}`, gate.questions, { cache: false });
+  const { answers, usage, model } = await ask(`# ${gate.stateHint}\n\n${prepared}`, typeof gate.questions === "function" ? gate.questions(prepared) : gate.questions, { cache: false });
   if (model) lastModel = model;
   tokens += usage?.input_tokens ?? 0;
   const r = gate.decide(answers, prepared);

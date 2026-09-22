@@ -872,6 +872,53 @@ else
   printf '%s\n' "$SMOKE_OUT" | grep -E '✗' | head -6 | sed 's/^/    /'
 fi
 
+# --- Spec kapisi TITIZLIGI cezalandirmamali ------------------------------
+# Eski olcum tek bir soruydu: "bu spec'teki HER kabul kriteri dogrulanabilir".
+# N maddenin tumu uzerindeki bir baglac, madde sayisiyla yapisal olarak coker.
+# Esik 0.80 ise DORT maddelik fixture'lar uzerinde ayarlanmisti. Sonuc: gercek
+# spec'ler gecemiyordu ve kapi, bilesik maddeleri bolmeyi — dogru spec
+# pratigini — cezalandiriyordu (olculdu 22 Eyl 2026: M1'in spec'i 18'den 44
+# maddeye bolundu, madde kalitesi yukseldi, toplam olcum 0.51'den yalnizca
+# 0.59'a gelebildi ve kapi yine durdurdu).
+SPECGATE="$(env -u SDLC_PROJECT_ROOT node --input-type=module -e '
+const { GATES } = await import(process.argv[1] + "/gates/questions.ts");
+const g = GATES.spec;
+const bad = [];
+const mkSpec = (n) => "## Acceptance criteria\n\n" + Array.from({length:n},(_,i)=>
+  `${i+1}. WHEN x happens, THE SYSTEM SHALL set field y to ${i}.`).join("\n\n");
+const decide = (n, score) => {
+  const prepared = g.prepare(mkSpec(n));
+  const qs = g.questions(prepared);
+  const a = Object.fromEntries(qs.map(q => [q.id, { id: q.id, value: q.kind === "noul" ? score : 1, confidence: 1 }]));
+  a.ambiguity = { id: "ambiguity", value: 1, confidence: 1, probabilities: { "0": 0.9, "1": 0.1 } };
+  a.scope = { id: "scope", value: 0.9, confidence: 1 };
+  return g.decide(a, prepared);
+};
+// BOYUTTAN BAGIMSIZLIK: ayni kalitede 4 ve 60 maddelik spec ayni karari almali.
+const small = decide(4, 0.9), big = decide(60, 0.9);
+if (small.decision !== "pass") bad.push(`4 maddelik guclu spec gecmedi: ${small.reason}`);
+if (big.decision !== "pass") bad.push(`60 maddelik guclu spec gecmedi: ${big.reason}`);
+// Kriter basina olculmeli: TEK zayif madde durdurmali, sayisi ne olursa olsun.
+const prepared = g.prepare(mkSpec(40));
+const qs = g.questions(prepared);
+const a = Object.fromEntries(qs.map(q => [q.id, { id: q.id, value: q.kind === "noul" ? 0.95 : 1, confidence: 1 }]));
+a.ambiguity = { id: "ambiguity", value: 1, confidence: 1, probabilities: { "0": 0.9, "1": 0.1 } };
+a.scope = { id: "scope", value: 0.9, confidence: 1 };
+a.ac_7 = { id: "ac_7", value: 0.2, confidence: 1 };
+const one = g.decide(a, prepared);
+if (one.decision !== "block") bad.push("tek zayif kriter durdurmadi");
+else if (!/AC-7/.test(one.reason)) bad.push(`blok gerekcesi zayif maddeyi adiyla soylemiyor: ${one.reason}`);
+// Kriter yoksa gecmemeli.
+if (g.decide({ ambiguity:{id:"ambiguity",value:1,confidence:1,probabilities:{"0":0.9}}, scope:{id:"scope",value:0.9,confidence:1} }, "").decision !== "block")
+  bad.push("kriteri olmayan spec gecti");
+console.log(bad.join(" · "));
+' "$HARNESS" 2>&1)"
+if [ -z "$SPECGATE" ]; then
+  printf '  ✓ %s\n' "spec kapısı boyuttan bağımsız, tek zayıf kriteri adıyla durduruyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "spec kapısı bozuk — $SPECGATE"; FAIL=$((FAIL+1))
+fi
+
 # --- Zincir KAGITTA MI, kapida mi ---------------------------------------
 # chain.ts yaziliydi ama gercek hicbir komut ona bakmiyordu: yalnizca kuru
 # kosum, HIC KOSMAMIS orkestrator ve selftest okuyordu. Sonuc F4-1'in kendi

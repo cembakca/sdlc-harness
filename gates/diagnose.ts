@@ -12,6 +12,7 @@
 
 import { readFileSync } from "node:fs";
 import { ask, isOffline } from "./jev.ts";
+import { extractCriteria } from "./criteria.ts";
 
 const path = process.argv[2];
 if (!path) {
@@ -26,12 +27,9 @@ if (isOffline()) {
 const text = readFileSync(path, "utf8");
 
 // "## Acceptance criteria" başlığı altındaki numaralı maddeleri topla.
-const section = text.split(/^##\s+/m).find((s) => /^acceptance criteria/i.test(s)) ?? "";
-const criteria: { id: string; body: string }[] = [];
-for (const raw of section.split(/\n(?=\s*\d+b?\.\s)/)) {
-  const m = raw.match(/^\s*(\d+b?)\.\s([\s\S]+?)(?=\n\s*\n|$)/);
-  if (m) criteria.push({ id: `AC-${m[1]}`, body: m[2].replace(/\s+/g, " ").trim() });
-}
+// Cikarim TEK KAYNAKTAN: kapinin durdurdugu madde ile burada gosterilen madde
+// ayni olmali (bkz. gates/criteria.ts).
+const criteria = extractCriteria(text);
 
 if (!criteria.length) {
   console.error("kabul kriteri bulunamadı (## Acceptance criteria başlığı ve numaralı maddeler bekleniyor)");
