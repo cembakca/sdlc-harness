@@ -944,6 +944,26 @@ else
   printf '  ✗ %s\n' "postbuild dosya deseni bozuk — $PB_OUT"; FAIL=$((FAIL+1))
 fi
 
+# --- Orkestrator KENDI kapisini onaylayamaz -----------------------------
+# Onayin tek gercek garantisi budur: akis approve.sh'i yalnizca --check ile,
+# yani OKUMAK icin cagirabilir. Once bu isi TTY kontrolu yapmaya calisiyordu
+# ama TTY zayif bir vekil (PTY taklit edilebilir) ve sohbet uzerinden calisan
+# insani kendi aracinda kilitliyordu (olculdu 22 Eyl 2026). Yapisal kontrol
+# hem daha guclu hem insani engellemiyor.
+AP_CALLS="$(grep -o 'approve\.sh"[^)]*' "$HARNESS/.claude/workflows/sdlc.js" | grep -v -- '--check' || true)"
+if [ -z "$AP_CALLS" ]; then
+  printf '  ✓ %s\n' "orkestratör onayı yalnızca okuyor, veremiyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "akış approve.sh'i --check dışında çağırıyor — kendi kapısını onaylayabilir:"; FAIL=$((FAIL+1))
+  printf '%s\n' "$AP_CALLS" | head -3 | sed 's/^/      /'
+fi
+# Onay KANALI kayda gecmeli: terminal onayi ile sohbet onayi ayirt edilebilsin.
+if grep -q 'channel' "$HARNESS/scripts/sdlc/approve.sh"; then
+  printf '  ✓ %s\n' "onayın hangi kanaldan geldiği deftere yazılıyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "onay kanalı kaydedilmiyor — terminal ile sohbet onayı ayırt edilemez"; FAIL=$((FAIL+1))
+fi
+
 # --- Devre kesiciler KABULDEN sonra sifirlanmali ------------------------
 # "Durdurucu hattin israrini keser, insanin mudahalesini degil." Toplam sayan
 # bir kesici, is duzelse bile bir daha acilmaz ve tek cikis 'force' olur.

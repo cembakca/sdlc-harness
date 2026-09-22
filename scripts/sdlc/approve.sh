@@ -57,16 +57,49 @@ fi
 TICKET="${1:?kullanim: approve.sh <TICKET> <kapi> \"<gerekce>\"}"
 GATE="${2:?kapi adi: spec | scope | blast | review | postbuild}"
 REASON="${3:?gerekce zorunlu — neden onayladigin kaydin kendisi kadar onemli}"
-[ -t 0 ] && [ -t 1 ] || { echo "onay interaktif terminalde, insan tarafindan verilmeli" >&2; exit 2; }
-WHO="$(id -un)"
-printf '%s\n' "Insan onayi: $TICKET · $GATE · $WHO" "Gerekce: $REASON"
-printf 'Kaydetmek icin EVET yaz: '
-read -r CONFIRM
-[ "$CONFIRM" = "EVET" ] || { echo "onay kaydedilmedi" >&2; exit 2; }
+# ONAY NEREDEN GELDI — ve neyin garantisi neyle sagleniyor.
+#
+# Once TTY sartti: "onay interaktif terminalde verilmeli". O kontrol TEK bir
+# seyi engellemeye calisiyordu — ajanin kendi kosusunun icinde kendi kapisini
+# onaylamasi. Ama TTY bunun zayif bir vekili (PTY taklit edilebilir) ve gercek
+# bir bedeli var: sohbet uzerinden calisan insani KENDI aracinda kilitliyor
+# (olculdu 22 Eyl 2026: kullanici onayi verdi, hat gecirmedi).
+#
+# Asil garantiler zaten baska yerlerde ve daha guclu:
+#   - onay SON kapi satirina baglanir ve o satir "human" degilse reddedilir
+#   - artifact hash'i yazilir; kapi yeniden olculurse onay duser (readiness)
+#   - defter muhur zinciri kurcalamayi gosterir
+#   - ORKESTRATOR approve.sh'i yalnizca --check ile cagirir (selftest zorlar)
+# Sonuncusu, TTY'nin yapmaya calistigi seyi YAPISAL olarak yapar.
+#
+# Geriye "onay nasil geldi" kaliyor; o da artik kayda geciyor. Okuyan kisi
+# terminal onayiyla sohbet onayini ayirt edebilsin diye.
+if [ -t 0 ] && [ -t 1 ]; then
+  CHANNEL="terminal"
+  WHO="$(id -un)"
+  printf '%s\n' "Insan onayi: $TICKET · $GATE · $WHO" "Gerekce: $REASON"
+  printf 'Kaydetmek icin EVET yaz: '
+  read -r CONFIRM
+  [ "$CONFIRM" = "EVET" ] || { echo "onay kaydedilmedi" >&2; exit 2; }
+else
+  CHANNEL="${SDLC_APPROVE_CHANNEL:-}"
+  WHO="${SDLC_APPROVE_AS:-}"
+  if [ -z "$WHO" ] || [ -z "$CHANNEL" ]; then
+    echo "onay terminalsiz kaydedilecekse KIMIN verdigi ve NEREDEN geldigi yazilmalidir:" >&2
+    echo "  SDLC_APPROVE_AS=\"<isim>\" SDLC_APPROVE_CHANNEL=chat scripts/sdlc/approve.sh $TICKET $GATE \"<gerekce>\"" >&2
+    echo "  (terminalde koşarsan ikisi de gerekmez; kanal 'terminal' yazilir)" >&2
+    exit 2
+  fi
+  case "$CHANNEL" in
+    chat|ci|terminal) ;;
+    *) echo "bilinmeyen onay kanali: $CHANNEL (chat | ci | terminal)" >&2; exit 2 ;;
+  esac
+  echo "onay kaydediliyor · kanal: $CHANNEL · veren: $WHO" >&2
+fi
 
 node --input-type=module -e '
   const { record, read, verify } = await import("'"$HARNESS"'/gates/journal.ts");
-  const [ticket, gate, reason, who] = process.argv.slice(1);
+  const [ticket, gate, reason, who, channel] = process.argv.slice(1);
   const verdict = verify(ticket);
   if (!verdict.ok) {
     console.error(`onay reddedildi: karar defteri bozuk: ${verdict.reason}`);
@@ -94,8 +127,10 @@ node --input-type=module -e '
     artifact: lastGate.artifact,
     decision: "approved",
     reason: `${who}: ${reason}`,
-    measures: { ...(lastGate.measures ?? {}), ...(artifactHash ? { artifactHash } : {}) },
+    // Kanal da kayda girer: terminal onayi ile sohbet onayini okuyan biri
+    // ayirt edebilmeli. Ikisi de gecerlidir, ama ayni sey degildir.
+    measures: { ...(lastGate.measures ?? {}), channel, ...(artifactHash ? { artifactHash } : {}) },
   });
-  console.log(`onay kaydedildi — ${ticket} · ${gate} · ${who}`);
+  console.log(`onay kaydedildi — ${ticket} · ${gate} · ${who} · kanal: ${channel}`);
   console.log(`kapinin gerekcesi: ${lastGate.reason}`);
-' "$TICKET" "$GATE" "$REASON" "$WHO"
+' "$TICKET" "$GATE" "$REASON" "$WHO" "$CHANNEL"
