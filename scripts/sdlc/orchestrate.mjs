@@ -117,7 +117,34 @@ if (total !== null && (!Number.isFinite(total) || total < 0)) {
   process.exit(2);
 }
 
-function claude(prompt, { model, label } = {}) {
+/**
+ * AJAN COKMESI: KANIT SAKLA, BIR KEZ YENIDEN DENE, SONRA YAPISAL DUR.
+ *
+ * Olculdu 22 Eyl 2026 (M1): guvenlik denetcisi "Claude exit 1:" diye dustu ve
+ * iki nokta ustusteden SONRASI BOSTU — stderr bos geldigi icin elimizde hicbir
+ * teshis kaniti yoktu. Kosu da yigin iziyle oldu; kapi kararlarinin urettigi
+ * yapisal durusun yerine cokme gecti.
+ *
+ * Ayni aile: koruma var, kanit yok. writeArtifact icin cozulmustu, ajan
+ * cagrisi icin cozulmemisti.
+ *
+ * Saglayici cagrilari gecici olarak duser (kota, oturum, ag). Jev adapteri
+ * bunu 4 denemeyle zaten karsiliyor; ajan cagrisinda hicbir tekrar yoktu.
+ */
+const AGENT_RETRY_MS = 4000;
+
+async function claude(prompt, opts = {}) {
+  try {
+    return await claudeOnce(prompt, opts);
+  } catch (error) {
+    if (error?.sdlcStop) throw error;
+    console.error(`${opts.label ?? "agent"}: ilk deneme düştü, ${AGENT_RETRY_MS / 1000}s sonra bir kez daha — ${error.message.slice(0, 160)}`);
+    await new Promise((r) => setTimeout(r, AGENT_RETRY_MS));
+    return await claudeOnce(prompt, opts);
+  }
+}
+
+function claudeOnce(prompt, { model, label } = {}) {
   return new Promise((resolve, reject) => {
     const args = ["-p", "--output-format", "json", "--no-session-persistence", "--permission-mode", "auto",
       "--tools", "Read,Glob,Grep,Skill"];
@@ -134,7 +161,26 @@ function claude(prompt, { model, label } = {}) {
     child.stdin.on("error", reject);
     child.on("error", reject);
     child.on("close", (code) => {
-      if (code !== 0) return reject(new Error(`${label ?? "agent"}: Claude exit ${code}: ${stderr.slice(-1000)}`));
+      if (code !== 0) {
+        // Bos stderr en kotu durum: cikti hic gorulmeden kayboluyordu.
+        // Ne cikti varsa diske yaz ve YOLUNU soyle.
+        let saved = "";
+        try {
+          const dir = resolve(root, "docs/sdlc", ticket);
+          mkdirSync(dir, { recursive: true });
+          saved = resolve(dir, `.agent-${(label ?? "agent").replace(/[^a-z0-9]+/gi, "-")}.log`);
+          writeFileSync(saved,
+            `label: ${label ?? "agent"}\nmodel: ${model ?? "(varsayilan)"}\nexit: ${code}\n` +
+            `--- stderr ---\n${stderr || "(bos)"}\n--- stdout ---\n${stdout || "(bos)"}\n`, "utf8");
+        } catch { /* yazamadik: en azindan mesaj kalsin */ }
+        const detail = (stderr || stdout).trim().slice(-600) || "(saglayici hicbir sey yazmadi)";
+        const err = new Error(
+          `${label ?? "agent"}: Claude exit ${code} — ${detail}` +
+          (saved ? `\n  tam cikti: ${saved.replace(root + "/", "")}` : "")
+        );
+        err.agentFailure = { label: label ?? "agent", code, saved };
+        return reject(err);
+      }
       let answer;
       try { answer = JSON.parse(stdout); }
       catch { return reject(new Error(`${label ?? "agent"}: Claude JSON çıktısı okunamadı: ${stdout.slice(-500)}`)); }
@@ -260,7 +306,21 @@ try {
   // dondurmedi) bir durustur: gerekcesi, kaniti ve bir sonraki adimi vardir ve
   // kapi kararlariyla ayni cikis koduyla (20) biter. Yigin izi yalnizca
   // gercekten beklenmeyen hata icin.
-  if (error?.sdlcStop) {
+  if (error?.agentFailure) {
+    const { label, code, saved } = error.agentFailure;
+    console.log(JSON.stringify({
+      ticket,
+      stoppedAt: `agent:${label}`,
+      reason: error.message,
+      next:
+        `"${label}" ajani ${code} ile dustu ve bir kez daha denendi. ` +
+        (saved ? `Tam cikti ${saved.replace(root + "/", "")} icinde; once ONA bak. ` : "") +
+        `Saglayici gecici duserse (kota, oturum, ag) hatti tekrar kosturmak yeterli; ` +
+        `kalici bir hataysa cikti onu soyler.`,
+    }, null, 2));
+    console.error(error.message);
+    process.exitCode = 20;
+  } else if (error?.sdlcStop) {
     console.log(JSON.stringify({
       ticket,
       stoppedAt: error.sdlcStop.stoppedAt,

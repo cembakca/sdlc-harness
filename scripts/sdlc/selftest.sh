@@ -1031,6 +1031,23 @@ else
   printf '  ✗ %s\n' "review döngüsü yakınsamıyor —$RS_BAD"; FAIL=$((FAIL+1))
 fi
 
+# --- Ajan cokerse KANIT kalmali, kosu yigin iziyle olmemeli -------------
+# Olculdu 22 Eyl 2026 (M1): guvenlik denetcisi "Claude exit 1:" diye dustu ve
+# iki nokta ustusteden SONRASI BOSTU — stderr bos geldigi icin elimizde hicbir
+# teshis kaniti yoktu. Ayni aile: koruma var, kanit yok. writeArtifact icin
+# cozulmustu, ajan cagrisi icin cozulmemisti.
+AG="$HARNESS/scripts/sdlc/orchestrate.mjs"
+AG_BAD=""
+grep -q 'agentFailure' "$AG" || AG_BAD="$AG_BAD cokme-yapisal-durus-uretmiyor"
+grep -q '\.agent-' "$AG" || AG_BAD="$AG_BAD cikti-diske-yazilmiyor"
+grep -q 'claudeOnce' "$AG" || AG_BAD="$AG_BAD tekrar-denemiyor"
+grep -q 'saglayici hicbir sey yazmadi' "$AG" || AG_BAD="$AG_BAD bos-cikti-adlandirilmiyor"
+if [ -z "${AG_BAD// /}" ]; then
+  printf '  ✓ %s\n' "ajan çökerse çıktı saklanıyor, bir kez yeniden deneniyor, yapısal duruyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "ajan çökmesi kanıtsız —$AG_BAD"; FAIL=$((FAIL+1))
+fi
+
 # --- Durdurucunun onerdigi care UYGULANABILIR olmali ---------------------
 # Bir durdurucu duruyorsa ve "sunu yap" diyorsa, o sey desteklenen arayuzden
 # gercekten yapilabilmeli. Yapilamiyorsa durdurucu degil TUZAKTIR.
