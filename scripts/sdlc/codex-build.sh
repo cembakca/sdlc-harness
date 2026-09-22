@@ -99,7 +99,18 @@ if [ -n "$GITDIR" ]; then
   EXCL="$GITDIR/info/exclude"
   mkdir -p "$(dirname "$EXCL")"
   # Haric tutulacak yollar: her yiginin deps + env dosyalari.
+  #
+  # ARACIN SURUMU URUNUN DIFF'INDE ISI YOK. Harness submodule olarak bagliysa
+  # ve bir bilet ucarken guncellenirse, isaretci degisikligi biletin diff'ine
+  # karisiyor ve postbuild kapisi hakli olarak "planda olmayan dosya degismis"
+  # diyor (olculdu 22 Eyl 2026, M1). Harness surumunu insan ana dalda yukseltir,
+  # Codex bir build turunda degil.
   EXCLUDES=""
+  HARNESS_REL="$(python3 -c 'import os,sys;print(os.path.relpath(sys.argv[1],sys.argv[2]))' "$HARNESS" "$ROOT" 2>/dev/null || true)"
+  case "$HARNESS_REL" in
+    ""|.|..*) ;;                       # harness proje disinda ya da ayni dizin
+    *) EXCLUDES="$EXCLUDES $HARNESS_REL" ;;
+  esac
   for st in $(cfg stacks | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{JSON.parse(s).forEach(x=>console.log(x.name))}catch{}})'); do
     SR="$(cfg stack "$st" root)"
     for dep in $(cfg stack "$st" deps | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log((JSON.parse(s)||[]).join(" "))}catch{}})'); do
