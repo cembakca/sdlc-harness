@@ -116,6 +116,25 @@ try {
   /* hash yok — eskalasyon eski davranisa duser */
 }
 
+// REVIEW KAPISININ CAPASI: denetlenen URUN DIFF'i.
+//
+// Onay REVIEW.md'nin hash'ine baglaninca hic tutmuyordu — rapor her kosuda
+// yeniden uretiliyor. Onaylanan sey rapor metni degil, "bu koddaki kalan
+// bulgularla devam edilmesi"; o yuzden capa diff olmali (olculdu 22 Eyl 2026).
+let diffHash = "";
+if (gate.name === "review") {
+  try {
+    const base = readFileSync(fromRoot("docs/sdlc", ticketOf(artifactPath), ".base-branch"), "utf8").trim() || "main";
+    const wt = fromRoot(".sdlc-worktrees", ticketOf(artifactPath));
+    const patch = execFileSync("git", ["-C", wt, "diff", `${base}...HEAD`, "--", ".", ":!docs/sdlc"], {
+      encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
+    });
+    diffHash = createHash("sha256").update(patch).digest("hex").slice(0, 16);
+  } catch {
+    /* worktree yok ya da diff alinamadi — capa yok, eski davranisa duser */
+  }
+}
+
 let headSha = "";
 if (gate.name === "review") {
   try {
@@ -152,6 +171,7 @@ record({
     ...(artifactHash ? { artifactHash } : {}),
     ...(unstable ? { unstable: `${unstable.first}/${unstable.second}` } : {}),
     ...(headSha ? { headSha } : {}),
+    ...(diffHash ? { diffHash } : {}),
   },
 });
 

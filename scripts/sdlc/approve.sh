@@ -43,11 +43,31 @@ if [ "${1:-}" = "--check" ]; then
     const hashOf = (p) => { try { return crypto.createHash("sha256")
       .update(fs.readFileSync(p.startsWith("/") ? p : `'"$ROOT"'/${p}`)).digest("hex").slice(0,16) }
       catch { return "" } };
+    // REVIEW KAPISI ISTISNA: onayin capasi RAPOR DEGIL, DENETLENEN KOD.
+    //
+    // REVIEW.md her kosuda denetciler tarafindan YENIDEN URETILIYOR. Capa
+    // rapor olunca insan onayi hicbir zaman tutmuyordu: her kosu raporu
+    // degistiriyor, onay bayatliyor, kapi tekrar soruyor. Olculdu 22 Eyl 2026
+    // (M1): onay iki kez kaydedildi, ikisi de bir sonraki kosuda dustu ve hat
+    // ayni kapida dondu.
+    //
+    // Onaylanan sey "bu rapor metni" degil, "bu koddaki kalan bulgularla
+    // devam edilmesi". O yuzden capa biletin URUN DIFF'i: kod degisirse onay
+    // duser, rapor yeniden yazilirsa dusmez.
     const approvedHash = lastOk.measures && lastOk.measures.artifactHash;
-    const nowHash = lastGate ? hashOf(lastGate.artifact) : "";
-    if (approvedHash && nowHash && approvedHash !== nowHash) {
-      console.error("onay gecersiz: belge onaydan sonra degisti");
-      process.exit(1);
+    if (gate === "review") {
+      const approvedDiff = lastOk.measures && lastOk.measures.diffHash;
+      const nowDiff = lastGate && lastGate.measures ? lastGate.measures.diffHash : "";
+      if (approvedDiff && nowDiff && approvedDiff !== nowDiff) {
+        console.error("onay gecersiz: denetlenen kod onaydan sonra degisti");
+        process.exit(1);
+      }
+    } else {
+      const nowHash = lastGate ? hashOf(lastGate.artifact) : "";
+      if (approvedHash && nowHash && approvedHash !== nowHash) {
+        console.error("onay gecersiz: belge onaydan sonra degisti");
+        process.exit(1);
+      }
     }
     console.log(`${lastOk.at.slice(0,16).replace("T"," ")} · ${lastOk.reason}`);
   ' "$TICKET" "$GATE"
