@@ -216,8 +216,13 @@ const roundCount = parseJson(
 // Yakinsamayan bir spec, daha fazla turla degil INSANLA duzelir.
 const specBlocks = parseJson(
   (await command("node", ["--input-type=module", "-e",
+    // SON GECISTEN BERI kac blok. Toplam blok sayilsaydi kesici bir kez
+    // tetiklendikten sonra spec DUZELSE BILE bir daha asla acilmazdi ve tek
+    // cikis 'force' olurdu — yani kesici, duzeltmeyi de engellerdi.
     "const {read}=await import(process.env.SDLC_HARNESS+'/gates/journal.ts'); " +
-    "console.log(JSON.stringify({n:read(process.argv[1]).filter(x=>x.gate==='spec'&&x.decision==='block').length}))",
+    "const rs=read(process.argv[1]).filter(x=>x.gate==='spec'); " +
+    "let n=0; for(const r of rs){ if(r.decision==='pass') n=0; else if(r.decision==='block') n++; } " +
+    "console.log(JSON.stringify({n}))",
     ticket])).stdout
 )?.n ?? 0;
 
