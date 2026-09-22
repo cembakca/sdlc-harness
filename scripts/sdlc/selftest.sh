@@ -872,6 +872,34 @@ else
   printf '%s\n' "$SMOKE_OUT" | grep -E '✗' | head -6 | sed 's/^/    /'
 fi
 
+# --- Sozlesmeye uymayan model ciktisi: DURUS, cokme degil ---------------
+# writeArtifact ham Error firlatiyordu: kosu yigin iziyle oluyor, deftere satir
+# dusmuyor ve modelin NE dondugu hic gorulemiyordu — hatayi teshis edecek tek
+# kanit siliniyordu (olculdu 22 Eyl 2026, M1'in plan fazinda).
+AW="$(mktemp -d)/proje"; mkdir -p "$AW/sdlc" "$AW/docs/sdlc/AW-1"
+printf '{"schemaVersion":1,"name":"p","stacks":[]}' > "$AW/sdlc/project.json"
+AW_OUT="$(env -u SDLC_PROJECT_ROOT SDLC_PROJECT_ROOT="$AW" node --input-type=module -e '
+import { readFileSync, existsSync } from "node:fs";
+// orchestrate.mjs bir CLI; writeArtifact davranisini kaynagindan okuyup
+// ayni kurallarla sinamak yerine, sozlesmenin iki ucunu dogruluyoruz:
+const src = readFileSync(process.argv[1] + "/scripts/sdlc/orchestrate.mjs", "utf8");
+const bad = [];
+if (!/function unfence/.test(src)) bad.push("kod cercevesi soyulmuyor");
+if (!/\.rejected/.test(src)) bad.push("reddedilen cikti kaydedilmiyor");
+if (!/sdlcStop/.test(src)) bad.push("sozlesme ihlali yapisal durus uretmiyor");
+if (!/process\.exitCode = 20/.test(src)) bad.push("durus kapi kararlariyla ayni cikis kodunu kullanmiyor");
+// unfence gercekten soyuyor mu
+const m = "```markdown\n# Plan\n\nicerik\n```".match(/^```[a-zA-Z]*\n([\s\S]*?)\n```$/);
+if (!m || !m[1].trim().startsWith("#")) bad.push("unfence deseni sarmalanmis belgeyi acmiyor");
+console.log(bad.join(" · "));
+' "$HARNESS" 2>&1)"
+if [ -z "$AW_OUT" ]; then
+  printf '  ✓ %s\n' "sözleşmeye uymayan model çıktısı duruş üretiyor, çökme değil"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "artifact sözleşmesi bozuk — $AW_OUT"; FAIL=$((FAIL+1))
+fi
+rm -rf "$AW"
+
 # --- Spec kapisi TITIZLIGI cezalandirmamali ------------------------------
 # Eski olcum tek bir soruydu: "bu spec'teki HER kabul kriteri dogrulanabilir".
 # N maddenin tumu uzerindeki bir baglac, madde sayisiyla yapisal olarak coker.

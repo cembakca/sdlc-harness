@@ -76,6 +76,20 @@ function claude(prompt, { model, label } = {}) {
   });
 }
 
+/**
+ * Model ciktisindaki SARMALAYICI kod cercevesini soyar.
+ *
+ * Model bazen tam belgeyi ```markdown ... ``` icine koyar. Bu bir bicimleme
+ * artefakti, icerik hatasi degil: icerideki belge dogruysa reddetmek turu
+ * bosa harcar. Ama YALNIZCA dis cerceve soyulur; icerik yine "# ile baslamali"
+ * kuralindan gecer — yani gevsetme degil, normalizasyon.
+ */
+function unfence(text) {
+  const t = String(text ?? "").trim();
+  const m = t.match(/^```[a-zA-Z]*\n([\s\S]*?)\n```$/);
+  return m ? m[1].trim() : t;
+}
+
 function writeArtifact(path, content) {
   const allowed = new Set(["spec.md", "plan.md", "REVIEW.md", "UAT.md"]);
   const directory = resolve(root, "docs/sdlc", ticket);
@@ -83,11 +97,26 @@ function writeArtifact(path, content) {
   if (dirname(target) !== directory || !allowed.has(target.split("/").at(-1))) {
     throw new Error(`izin verilmeyen artifact yolu: ${path}`);
   }
-  if (typeof content !== "string" || !content.trim().startsWith("#")) {
-    throw new Error(`${path}: model tam Markdown belge döndürmedi`);
+  const body = unfence(content);
+  if (!body.startsWith("#")) {
+    // REDDEDILEN CIKTI KAYBOLMAMALI. Eskiden yalnizca firlatiliyordu: kosu
+    // yigin iziyle oluyor, deftere satir dusmuyor ve modelin NE dondugu hic
+    // gorulemiyordu — yani hatayi teshis edecek tek kanit siliniyordu
+    // (olculdu 22 Eyl 2026, M1'in plan fazinda).
+    mkdirSync(directory, { recursive: true });
+    const rejected = `${target}.rejected`;
+    writeFileSync(rejected, String(content ?? ""), "utf8");
+    const head = String(content ?? "").trim().slice(0, 200).replace(/\n/g, " ⏎ ");
+    const err = new Error(
+      `${path}: model tam Markdown belge döndürmedi (ilk karakter "#" değil).\n` +
+      `  dönen metnin başı: ${head || "(boş)"}\n` +
+      `  tamamı kaydedildi: ${rejected.replace(root + "/", "")}`
+    );
+    err.sdlcStop = { stoppedAt: `artifact:${target.split("/").at(-1)}`, rejected };
+    throw err;
   }
   mkdirSync(directory, { recursive: true });
-  writeFileSync(target, content.trimEnd() + "\n", "utf8");
+  writeFileSync(target, body.trimEnd() + "\n", "utf8");
 }
 
 function command(file, args = [], allowed = [0]) {
@@ -124,6 +153,25 @@ try {
   console.log(JSON.stringify(result, null, 2));
   process.exitCode = result?.ready === false || result?.stoppedAt ? 20 : 0;
 } catch (error) {
-  console.error(error?.stack ?? String(error));
-  process.exitCode = 1;
+  // BEKLENEN DURUS ile COKME ayri seylerdir. Sozlesme ihlali (model tam belge
+  // dondurmedi) bir durustur: gerekcesi, kaniti ve bir sonraki adimi vardir ve
+  // kapi kararlariyla ayni cikis koduyla (20) biter. Yigin izi yalnizca
+  // gercekten beklenmeyen hata icin.
+  if (error?.sdlcStop) {
+    console.log(JSON.stringify({
+      ticket,
+      stoppedAt: error.sdlcStop.stoppedAt,
+      reason: error.message,
+      next:
+        `Model sozlesmeye uymayan bir cikti dondurdu. Reddedilen metin ` +
+        `${error.sdlcStop.rejected.replace(root + "/", "")} dosyasinda duruyor; ` +
+        `once ONA bak. Cogu zaman beceri promptu belgeyi acıklamayla sarmalatiyor ` +
+        `ya da model arac cagrisi donduruyor. Hat tekrar kosturulabilir.`,
+    }, null, 2));
+    console.error(error.message);
+    process.exitCode = 20;
+  } else {
+    console.error(error?.stack ?? String(error));
+    process.exitCode = 1;
+  }
 }
