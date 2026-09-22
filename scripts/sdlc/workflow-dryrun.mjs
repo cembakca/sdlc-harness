@@ -112,8 +112,25 @@ function makeCommand(scenario, seen) {
       return { stdout, code: decision === "pass" ? 0 : decision === "human" ? 10 : 20 };
     }
     if (name === "approve.sh") return { stdout: scenario.approved ? "2026-09-21 12:00 · dry-run onayi" : "", code: scenario.approved ? 0 : 1 };
-    if (name === "node" && args[0] === "-e") return { stdout: "dry-run intent", code: 0 };
-    if (name === "node" && args[0] === "--input-type=module") return { stdout: JSON.stringify({ rounds: scenario.rounds ?? 0 }), code: 0 };
+    // Gomulu node script'leri ICERIGINE gore ayrilir: hepsini tek bir cevaba
+    // baglamak, yeni bir sorguyu sessizce eski cevapla besler ve durdurucu
+    // hic kosmadan "gecti" gorunur (22 Eyl 2026'da spec devre kesicisi
+    // yazilirken tam bu oldu).
+    if (name === "node" && args[0] === "-e") {
+      const src = String(args[1] ?? "");
+      if (/existsSync/.test(src)) {
+        return { stdout: JSON.stringify({ exists: scenario.specOnDisk === true }), code: 0 };
+      }
+      return { stdout: "dry-run intent", code: 0 };
+    }
+    if (name === "node" && args[0] === "--input-type=module") {
+      // ["--input-type=module", "-e", <script>, ...] — script args[2]'de.
+      const src = String(args[2] ?? args[1] ?? "");
+      if (/gate==='spec'/.test(src)) {
+        return { stdout: JSON.stringify({ n: scenario.specBlocks ?? 0 }), code: 0 };
+      }
+      return { stdout: JSON.stringify({ rounds: scenario.rounds ?? 0 }), code: 0 };
+    }
     if (name === "memory.sh") return { stdout: scenario.memory === false ? "HAFIZA-YOK: dry-run" : "emsal: benzer is yok", code: 0 };
     if (name === "review-scope.sh" && args[1] === "--patch") return { stdout: "diff --git a/x b/x\n+ok\n", code: 0 };
     if (name === "readiness.ts") return { stdout: scenario.ready === false ? "HAZIR DEĞİL" : "HAZIR", code: scenario.ready === false ? 20 : 0 };
@@ -142,6 +159,17 @@ async function run(name, scenario) {
 }
 
 const SCENARIOS = [
+  {
+    // Spec turu devre kesici: kapi ayni bilette ucuncu kez blokladiysa hat
+    // durur. Yakinsamayan bir spec daha fazla turla degil INSANLA duzelir;
+    // her tur yeni bir Opus belgesi + ~10k token kapi olcumu demek.
+    name: "spec üçüncü kez bloklandı → hat spec fazına girmeden durur",
+    scenario: { specBlocks: 3, gates: { spec: "block" } },
+    expect: (r) =>
+      r.result?.stoppedAt === "spec-devre-kesici" &&
+      !r.seen.includes("spec") &&
+      typeof r.result?.next === "string",
+  },
   {
     name: "spec kapısı bloke → plan fazına geçmemeli",
     scenario: { gates: { spec: "block" } },

@@ -65,6 +65,9 @@ const forceReplan = a.replan === true;
 // kapatırken başkasını bozabilir; iki tur sonra hâlâ kırmızıysa masa insana
 // devredilir. Token ve zaman bütçesi, hattın kendi ısrarına feda edilemez.
 const MAX_ROUNDS = Number(a.maxRounds ?? 2);
+// Spec turu ayri sayilir: build turu pahali ama spec turu SIK — kapi her
+// blokladiginda yeni bir Opus belgesi uretiliyor.
+const MAX_SPEC_ROUNDS = Number(a.maxSpecRounds ?? 3);
 
 // --- BÜTÇE -----------------------------------------------------------------
 //
@@ -206,6 +209,33 @@ const roundCount = parseJson(
     ticket])).stdout
 )?.rounds ?? 0;
 
+// SPEC TURU DEVRE KESICI. Build turlarinin siniri vardi, spec turlarinin YOKTU:
+// kapi blokladikca analist yeniden yaziyor ve hat kendi israriyla sinirsiz token
+// yakabiliyordu. Olculdu 22 Eyl 2026 (M1): uc tur, her turda Opus'la 16 KB spec
+// + ~10k token kapi olcumu, ve zayif madde sayisi 11'den 9'a ancak geldi.
+// Yakinsamayan bir spec, daha fazla turla degil INSANLA duzelir.
+const specBlocks = parseJson(
+  (await command("node", ["--input-type=module", "-e",
+    "const {read}=await import(process.env.SDLC_HARNESS+'/gates/journal.ts'); " +
+    "console.log(JSON.stringify({n:read(process.argv[1]).filter(x=>x.gate==='spec'&&x.decision==='block').length}))",
+    ticket])).stdout
+)?.n ?? 0;
+
+if (specBlocks >= MAX_SPEC_ROUNDS && !a.force) {
+  return {
+    ticket,
+    stoppedAt: "spec-devre-kesici",
+    specBlocks,
+    next:
+      `Spec kapisi bu bilette ${specBlocks} kez durdurdu (sinir ${MAX_SPEC_ROUNDS}). ` +
+      `Yakinsamayan bir spec daha fazla turla duzelmez: ya kapsam cok genis ` +
+      `(scripts/sdlc/defer.sh ile bol), ya intent.md belirsiz, ya da kalan maddeler ` +
+      `gercekten kod okumadan dogrulanamaz. Son olcum: node gates/flow.ts ${ticket} · ` +
+      `madde madde: node gates/diagnose.ts ${dir}/spec.md · ` +
+      `bilerek devam: { "ticket": "${ticket}", "force": true }.`,
+  };
+}
+
 if (roundCount >= MAX_ROUNDS && !a.force) {
   return {
     ticket,
@@ -279,11 +309,19 @@ if (specDecision === "pass") {
     weakness =
       `\n\nBU BELGE ZATEN VAR VE KAPI ONU DURDURDU. Kapinin olcumu:\n` +
       `${detail}\n` +
-      `BASTAN YAZMA. Yukaridaki puani DUSUK maddeleri yeniden yaz; esigi gecenlere ` +
-      `dokunma. Dusuk puanin iki tipik sebebi: (a) tek maddede birden cok tetikleyici ` +
-      `ve birden cok iddia var — bolunmeli, her madde tek bir gozlenebilir davranis ` +
-      `anlatmali; (b) madde bir UYGULAMA kisitini anlatiyor ("su sabitten turetilmeli") ` +
-      `— gozlenebilir davranisa cevrilmeli. Belgenin geri kalanini oldugu gibi koru.`;
+      `BASTAN YAZMA: esigi gecen maddelere dokunma, belgenin geri kalanini koru.\n` +
+      `Zayif maddeler icin uc secenek var ve UCU DE MESRU:\n` +
+      `  1. YENIDEN YAZ — madde tek bir gozlenebilir tetikleyici ve tek bir gozlenebilir ` +
+      `sonuc anlatsin.\n` +
+      `  2. BOL — tek maddede birden cok iddia varsa ayri maddelere ayir.\n` +
+      `  3. BIRLESTIR YA DA SIL — baska bir maddenin soyledigini tekrar eden madde ` +
+      `KALDIRILIR. Madde sayisini korumak diye bir kural YOK; kisa ve ayrik bir liste, ` +
+      `uzun ve tekrarli bir listeden iyidir.\n` +
+      `Dusuk puanin tipik sebepleri: (a) tek maddede birden cok tetikleyici ve iddia; ` +
+      `(b) madde bir UYGULAMA kisitini anlatiyor ("su sabitten turetilmeli") — ` +
+      `gozlenebilir davranisa cevrilmeli; (c) madde YAZILI OLMAYAN bir temele atifta ` +
+      `bulunuyor ("as it does today", "M1'den onceki halinden fazla degil") — temel ` +
+      `acikca yazilmali ya da madde dusmeli; (d) madde var olmayan bir seye atif yapiyor.`;
   }
 
   log(
