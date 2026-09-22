@@ -210,6 +210,38 @@ kapılar başkasıyla koşarsa `gates/readiness.ts` durdurur: kayıt hâlâ taze
 görünür ama koşan kapı hakkında hiçbir şey söylemez — hiçbir şeyin kırmızıya
 dönmediği bu durum, en sinsi kapı bozulmasıdır.
 
+## Durdurucu yazarken iki kural
+
+Bu hattın kendisi bir bileti uçtan uca koşturarak sınandı (22 Eylül 2026) ve
+çıkan on üç kusurun çoğu iki kalıba düştü. İkisi de "durdurmayı" biliyordu,
+"doğru yerde durmayı" bilmiyordu.
+
+**1. Durdurucu hattın ısrarını keser, insanın müdahalesini değil.**
+
+Aynı hata üç ayrı kılıkta çıktı:
+
+| ne | nasıl yanlıştı | ne olurdu |
+|---|---|---|
+| spec devre kesici | **toplam** blok sayıyordu | spec düzelse bile bir daha açılmazdı |
+| bilet kilidi | PID kontrolü olmasaydı | bir çökme bileti kalıcı kilitlerdi |
+| artifact koruması | ham `Error` fırlatıyordu | teşhis kanıtını siliyordu |
+
+Bir durdurucu eklerken sor: *düzeltmeyi yapan insan buradan nasıl çıkar?*
+Çıkış yolu yoksa durdurucu değil, tuzaktır.
+
+**2. Geçiş tablosu mutlu yolu değil, gerçek işi modellemeli.**
+
+`gates/chain.ts` başlangıçta yalnızca ileri geçişleri taşıyordu. Gerçek iş
+yineler ve başarısız olur:
+
+- kapı reddeder → belge yeniden yazılır (onarım döngüleri)
+- review bulgu verir → düzeltme **build'e** döner
+- build plana uymaz → **koşu** biter (bilet bitmez)
+
+Üçü de tabloda yoktu ve üçü de çalışırken "GEÇERSİZ GEÇİŞ" olarak patladı.
+Eksik kenar, zincire bakan her komutu normal işi durdurur hale getirir — bu
+yüzden zincir uzun süre kâğıtta kaldı: bağlansaydı işi engellerdi.
+
 ## Kalibrasyon
 
 Kapılar sessizce bozulur: model sürümü değişir, eşik kayar, bir fixture artık
