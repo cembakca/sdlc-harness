@@ -116,7 +116,7 @@ export type Confirm = {
 export async function ask(
   state: string,
   questions: Question[],
-  opts: { cache?: boolean; confirm?: Confirm } = {}
+  opts: { cache?: boolean; confirm?: Confirm; cacheState?: string } = {}
 ): Promise<{
   answers: Answers;
   usage?: Usage;
@@ -131,7 +131,18 @@ export async function ask(
   const useCache = opts.cache !== false;
   // Anahtar TAKMA ADI degil, takma adin SU ANKI karsiligini tasir: model
   // kaydiginda onbellek kendiliginden gecersizlesir.
-  const key = cache.keyOf(useCache ? await modelFingerprint() : model, state, questions);
+  // ONBELLEK ANAHTARI YARGILANAN SEYI tanimlar, ona yardimci olan baglami degil.
+  //
+  // scope kapisi state'e urun hafizasindan geri cagirim enjekte ediyor ve o
+  // metin her kosuda biraz farkli cumleleniyor. Anahtar tum state uzerinden
+  // kurulunca kapi onbellege HIC giremiyordu: ayni spec icin defterde 9692 ve
+  // 9756 token gorundu (olculdu 22 Eyl 2026). Dogrulamayla birlikte bu, her
+  // kosuda iki tam olcum demekti.
+  //
+  // `cacheState` verildiginde anahtar ondan kurulur. Baglamin degismesi kararı
+  // gecersiz kilmaz — zaten yas siniri var.
+  const keySource = opts.cacheState ?? state;
+  const key = cache.keyOf(useCache ? await modelFingerprint() : model, keySource, questions);
   if (useCache) {
     const hit = cache.get(key);
     if (hit) {

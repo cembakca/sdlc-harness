@@ -338,7 +338,7 @@ if (specDecision === "pass") {
     `brd-analyst skill'ini oku. ${dir}/intent.md dosyasından ${dir}/spec.md için ` +
       `İngilizce, EARS tarzı ölçülebilir kabul kriterleri, kapsam dışı başlığı ve ` +
       `açık sorular içeren TAM Markdown belgeyi döndür. İlk karakter # olsun. ` +
-      `Dosya yazma; belgeyi orkestratör kaydedecek.` + memory + weakness,
+      `Dosya yazma; belgeyi orkestratör kaydedecek. CEVABIN TAMAMI BELGE OLSUN: giriş cümlesi, açıklama, '---' ayıracı ya da kapanış yorumu ekleme.` + memory + weakness,
     { label: "spec", model: pick(rAnalysis, "analyst", "opus") }
   );
   writeArtifact(`${dir}/spec.md`, spec);
@@ -566,7 +566,7 @@ phase("gate:review");
 const reviewDocument = await agent(
   `Aşağıdaki bulgulardan ${dir}/REVIEW.md için TAM Markdown belge döndür ` +
     `(severity'ye göre sıralı, findings-json bloğu dahil). İlk karakter # olsun. ` +
-    `Dosya yazma; belgeyi orkestratör kaydedecek.\n\n--- GÜVENLİK ---\n${sec}\n\n--- MİMARİ ---\n${arch}`,
+    `Dosya yazma; belgeyi orkestratör kaydedecek. CEVABIN TAMAMI BELGE OLSUN: giriş cümlesi, açıklama, '---' ayıracı ya da kapanış yorumu ekleme.\n\n--- GÜVENLİK ---\n${sec}\n\n--- MİMARİ ---\n${arch}`,
   { label: "review:write" }
 );
 writeArtifact(`${dir}/REVIEW.md`, reviewDocument);
@@ -649,7 +649,7 @@ const uat = await agent(
   `uat-packager skill'ini oku. ${dir}/ altındaki spec.md, plan.md, REVIEW.md ve ` +
     `test sonuçlarından ${dir}/UAT.md için TAM Markdown belge döndür: senaryolar, ` +
     `hazırlık adımları, bilinen sınırlar, rollback. İlk karakter # olsun. ` +
-    `Dosya yazma; belgeyi orkestratör kaydedecek.`,
+    `Dosya yazma; belgeyi orkestratör kaydedecek. CEVABIN TAMAMI BELGE OLSUN: giriş cümlesi, açıklama, '---' ayıracı ya da kapanış yorumu ekleme.`,
   { label: "uat", model: pick(rDelivery, "uat", "sonnet") }
 );
 writeArtifact(`${dir}/UAT.md`, uat);

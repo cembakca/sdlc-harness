@@ -52,6 +52,8 @@ if (gate.prepare) state = gate.prepare(state);
 // Ürün hafızası: "bu iş daha önce yapılmış bir şeye benziyor mu" sorusu projeyi
 // bilmeyi gerektirir. Hafıza kapalıysa kapı çalışmaya devam eder, yalnızca
 // precedent sorusu boş bağlamla cevaplanır (ve "emsal yok" tarafına düşer).
+// Onbellek anahtari icin hafiza enjeksiyonundan ONCEKI hal saklanir.
+const stateBeforeContext = state;
 if (gate.wantsProjectContext) {
   try {
     const summary = state.split("\n").slice(0, 40).join(" ").slice(0, 600);
@@ -85,7 +87,10 @@ const { answers, usage, model, cached, unstable } = await ask(
   // Sorular sabit ya da state'ten tureyen olabilir (spec kapisi: kriter basina
   // bir soru). Ayni liste confirm turunda da kullanilir.
   typeof gate.questions === "function" ? gate.questions(state) : gate.questions,
-  { confirm: { label: (a) => gate.decide(a, state).decision, rank: (d) => RANK[d] ?? 1 } }
+  {
+    confirm: { label: (a) => gate.decide(a, state).decision, rank: (d) => RANK[d] ?? 1 },
+    cacheState: stateBeforeContext,
+  }
 );
 const measured = gate.decide(answers, state);
 

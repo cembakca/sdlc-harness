@@ -77,17 +77,27 @@ function claude(prompt, { model, label } = {}) {
 }
 
 /**
- * Model ciktisindaki SARMALAYICI kod cercevesini soyar.
+ * Model ciktisini BELGEYE indirger. Gevsetme degil, normalizasyon.
  *
- * Model bazen tam belgeyi ```markdown ... ``` icine koyar. Bu bir bicimleme
- * artefakti, icerik hatasi degil: icerideki belge dogruysa reddetmek turu
- * bosa harcar. Ama YALNIZCA dis cerceve soyulur; icerik yine "# ile baslamali"
- * kuralindan gecer — yani gevsetme degil, normalizasyon.
+ * Iki bicimleme artefakti gerceklesiyor ve ikisi de icerik hatasi degil:
+ *
+ *   1. Belge ```markdown ... ``` icine sarmalaniyor.
+ *   2. Belgeden once bir aciklama cumlesi geliyor. Olculdu 22 Eyl 2026, M1'in
+ *      plan fazinda: "No REVIEW.md exists for M1, so there are no open findings
+ *      to fold in. Here is the plan document. --- # Plan — M1 ..."
+ *
+ * Ikisinde de TAM BELGE ortada duruyor; turu bosa harcamak icin bir sebep yok.
+ * Ama sart gevsemiyor: normalizasyondan sonra metin yine "# " ile baslayan bir
+ * baslik tasimak ZORUNDA. Baslik hic yoksa reddedilir.
  */
-function unfence(text) {
-  const t = String(text ?? "").trim();
-  const m = t.match(/^```[a-zA-Z]*\n([\s\S]*?)\n```$/);
-  return m ? m[1].trim() : t;
+function normalizeDocument(text) {
+  let t = String(text ?? "").trim();
+  const fenced = t.match(/^```[a-zA-Z]*\n([\s\S]*?)\n```$/);
+  if (fenced) t = fenced[1].trim();
+  if (t.startsWith("#")) return t;
+  // Ilk ust duzey basliktan itibaren al; oncesi aciklamadir.
+  const at = t.search(/^# \S/m);
+  return at >= 0 ? t.slice(at).trim() : t;
 }
 
 function writeArtifact(path, content) {
@@ -97,7 +107,7 @@ function writeArtifact(path, content) {
   if (dirname(target) !== directory || !allowed.has(target.split("/").at(-1))) {
     throw new Error(`izin verilmeyen artifact yolu: ${path}`);
   }
-  const body = unfence(content);
+  const body = normalizeDocument(content);
   if (!body.startsWith("#")) {
     // REDDEDILEN CIKTI KAYBOLMAMALI. Eskiden yalnizca firlatiliyordu: kosu
     // yigin iziyle oluyor, deftere satir dusmuyor ve modelin NE dondugu hic

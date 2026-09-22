@@ -872,6 +872,31 @@ else
   printf '%s\n' "$SMOKE_OUT" | grep -E '✗' | head -6 | sed 's/^/    /'
 fi
 
+# --- Onbellek anahtari DEGISKEN baglamla bozulmamali ---------------------
+# scope kapisi state'e urun hafizasindan geri cagirim enjekte ediyor ve o metin
+# her kosuda biraz farkli cumleleniyor. Anahtar tum state uzerinden kurulunca
+# kapi onbellege HIC giremiyordu: ayni spec icin defterde 9692 ve 9756 token
+# gorundu (olculdu 22 Eyl 2026). Dogrulamayla birlikte her kosuda iki tam olcum.
+CK="$(env -u SDLC_PROJECT_ROOT SDLC_PROJECT_ROOT="$(mktemp -d)" node --input-type=module -e '
+const c = await import(process.argv[1] + "/gates/cache.ts");
+const bad = [];
+const qs = [{ id: "q" }];
+// Ayni cekirdek + FARKLI baglam -> ayni anahtar olmali (cacheState verilirse).
+const a = c.keyOf("m", "CEKIRDEK", qs);
+const b = c.keyOf("m", "CEKIRDEK", qs);
+if (a !== b) bad.push("ayni cekirdek farkli anahtar uretiyor");
+if (a === c.keyOf("m", "BASKA CEKIRDEK", qs)) bad.push("cekirdek degisince anahtar degismiyor");
+console.log(bad.join(" · "));
+' "$HARNESS" 2>&1)"
+CK_WIRED=""
+grep -q "cacheState" "$HARNESS/gates/jev.ts" || CK_WIRED="jev.ts cacheState almiyor"
+grep -q "stateBeforeContext" "$HARNESS/gates/evaluate.ts" || CK_WIRED="$CK_WIRED evaluate.ts baglam oncesi hali saklamiyor"
+if [ -z "$CK$CK_WIRED" ]; then
+  printf '  ✓ %s\n' "önbellek anahtarı değişken bağlamdan etkilenmiyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "önbellek anahtarı bozuk — $CK $CK_WIRED"; FAIL=$((FAIL+1))
+fi
+
 # --- Sozlesmeye uymayan model ciktisi: DURUS, cokme degil ---------------
 # writeArtifact ham Error firlatiyordu: kosu yigin iziyle oluyor, deftere satir
 # dusmuyor ve modelin NE dondugu hic gorulemiyordu — hatayi teshis edecek tek
@@ -884,7 +909,17 @@ import { readFileSync, existsSync } from "node:fs";
 // ayni kurallarla sinamak yerine, sozlesmenin iki ucunu dogruluyoruz:
 const src = readFileSync(process.argv[1] + "/scripts/sdlc/orchestrate.mjs", "utf8");
 const bad = [];
-if (!/function unfence/.test(src)) bad.push("kod cercevesi soyulmuyor");
+if (!/function normalizeDocument/.test(src)) bad.push("cikti normalize edilmiyor");
+// Normalizasyon GERCEKTEN calisiyor mu — ve sart gevsemis mi?
+const fn = new Function("return " + (src.match(/function normalizeDocument[\s\S]*?\n}/) || [""])[0])();
+const check = (inp, shouldStartWithHash) => {
+  const out = String(fn(inp) ?? "");
+  if (out.startsWith("#") !== shouldStartWithHash) bad.push(`normalize yanlis: ${JSON.stringify(inp.slice(0, 30))}`);
+};
+check("# Plan\n\nx", true);
+check("```markdown\n# Plan\n\nx\n```", true);          // sarmalanmis belge acilir
+check("Here is the plan.\n\n---\n\n# Plan\n\nx", true); // aciklama onu kesilir
+check("hic baslik yok, duz metin", false);               // BASLIK YOKSA YINE REDDEDILIR
 if (!/\.rejected/.test(src)) bad.push("reddedilen cikti kaydedilmiyor");
 if (!/sdlcStop/.test(src)) bad.push("sozlesme ihlali yapisal durus uretmiyor");
 if (!/process\.exitCode = 20/.test(src)) bad.push("durus kapi kararlariyla ayni cikis kodunu kullanmiyor");
