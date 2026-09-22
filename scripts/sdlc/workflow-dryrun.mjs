@@ -136,6 +136,7 @@ function makeCommand(scenario, seen) {
     if (name === "readiness.ts") return { stdout: scenario.ready === false ? "HAZIR DEĞİL" : "HAZIR", code: scenario.ready === false ? 20 : 0 };
     if (name === "test.sh") return { stdout: scenario.testFail ? "sonuc: fail" : "sonuc: pass", code: scenario.testFail ? 20 : 0 };
     if (name === "merge-check.sh") return { stdout: scenario.mergeFail ? "ÇAKIŞMA" : "birleşme temiz", code: scenario.mergeFail ? 20 : 0 };
+    if (name === "codex-build.sh") return { stdout: scenario.buildFail ? "BUILD PLANA UYMUYOR" : "diff --git a/x b/x\n+ok\n", code: scenario.buildFail ? 20 : 0 };
     return { stdout: `dry-run çıktısı (${label})`, code: 0 };
   };
 }
@@ -159,6 +160,16 @@ async function run(name, scenario) {
 }
 
 const SCENARIOS = [
+  {
+    // Build'in plana uymamasi BEKLENEN bir sonuc; cokme degil yapisal durus
+    // uretmeli, yoksa onarim dongusu hic baslamaz.
+    name: "build plana uymadı → çökme değil, gerekçeli duruş",
+    scenario: { buildFail: true },
+    expect: (r) =>
+      r.result?.stoppedAt === "build" &&
+      typeof r.result?.next === "string" &&
+      !r.seen.includes("review"),
+  },
   {
     // Spec turu devre kesici: kapi ayni bilette ucuncu kez blokladiysa hat
     // durur. Yakinsamayan bir spec daha fazla turla degil INSANLA duzelir;

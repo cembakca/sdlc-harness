@@ -467,7 +467,25 @@ phase("build");
 // kosmus). Kademeyi burada bildigimiz kaynaktan, analiz olcumunden yaziyoruz.
 log(`build Codex'e devrediliyor (izole worktree, kademe: ${rAnalysis.tier})`);
 
-const diff = (await command("scripts/sdlc/codex-build.sh", [ticket])).stdout;
+// Build'in plana uymamasi BEKLENEN bir sonuc: onarim dongusu tam bunun icin
+// var. Cikis kodunu allowed'a almazsak `command()` ham Error firlatiyor ve
+// kosu yigin iziyle oluyor — kapi kararlarinin urettigi yapisal durusun
+// yerine cokme geciyor (olculdu 22 Eyl 2026, M1'in build fazinda).
+const build = await command("scripts/sdlc/codex-build.sh", [ticket], [0, 20]);
+if (build.code !== 0) {
+  return {
+    ticket,
+    stoppedAt: "build",
+    buildExit: build.code,
+    diff: build.stdout.slice(-4000),
+    next:
+      `Build plana uymadan bitti. Codex'in raporu ${dir}/.codex-build.md icinde; ` +
+      `postbuild kapisinin "problems" maddeleri yukarida. Once ONLARI kapat, ` +
+      `sonra hatti tekrar kostur. Kod yazmasi gereken Codex'tir; plan yanlissa ` +
+      `plani duzelt ve --replan ile kos.`,
+  };
+}
+const diff = build.stdout;
 
 phase("gate:postbuild");
 // Build sonrası ölçümler de tek çağrıda: plan uygunluğu + commit disiplini + kademe.

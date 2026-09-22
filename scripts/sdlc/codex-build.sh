@@ -304,9 +304,30 @@ if [ "${SDLC_BUILD_NETWORK:-0}" = "1" ]; then
   echo "--- DIKKAT: kumsal agi acik (SDLC_BUILD_NETWORK=1)"
 fi
 
+# GIT METADATA KUMSALIN DISINDA KALIYORDU.
+#
+# Worktree'nin ".git"i bir DOSYA ve ana repodaki .git/worktrees/<T> dizinini
+# gosteriyor; commit ise oraya, .git/objects'e ve .git/refs'e yaziyor. Hicbiri
+# calisma alaninin icinde degil, yani "workspace-write" kumsalinda Codex COMMIT
+# ATAMIYOR. Olculdu 22 Eyl 2026 (M1): Codex 1. gorevi bitirdi, "Commit blocked
+# by Git metadata permissions" dedi ve kalan yedi gorevi ATLADI — plan "bir
+# gorev = bir commit" istedigi icin tek basina ilerleyemedi.
+#
+# Kumsal GEVSEMIYOR: ag yine kapali, dosya sistemi yine worktree ile sinirli.
+# Yalnizca bu worktree'nin commit atmasi icin gereken UC yol ekleniyor.
+# Tamami degil: .git kokunu vermek, Codex'e ana dalin ref'ini degistirme
+# imkani verirdi.
+GIT_COMMON="$(git -C "$WT" rev-parse --git-common-dir 2>/dev/null)"
+GIT_WT_DIR="$(git -C "$WT" rev-parse --git-dir 2>/dev/null)"
+GIT_DIRS=()
+for d in "$GIT_WT_DIR" "$GIT_COMMON/objects" "$GIT_COMMON/refs"; do
+  [ -n "$d" ] && [ -d "$d" ] && GIT_DIRS+=(--add-dir "$d")
+done
+
 env $SERVICE_ENVS codex exec \
   -C "$WT" \
   --sandbox workspace-write \
+  "${GIT_DIRS[@]+"${GIT_DIRS[@]}"}" \
   "${NET_ARGS[@]+"${NET_ARGS[@]}"}" \
   ${MODEL:+--model "$MODEL"} \
   ${EFFORT:+-c model_reasoning_effort="$EFFORT"} \

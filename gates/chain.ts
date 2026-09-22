@@ -92,7 +92,12 @@ export const TRANSITIONS: Record<Phase, Phase[]> = {
   // gerçekten ölçüldüğünde basılır; tablo "girilen fazları" modeller.
   "plan": ["gate:blast", "build", "BITTI"],
   "gate:blast": ["build", "plan", "BITTI"],
-  "build": ["gate:postbuild"],
+  // "BITTI" de mesru bir cikis: build plana uymadan bittiginde KOSU sona erer
+  // (bilet bitmez). Tablo yalnizca mutlu yolu modelliyordu ve build'in tek
+  // cikisi gate:postbuild yazilmisti; gercek bir build basarisizliginda
+  // orkestratör "GECERSIZ GECIS: build → BITTI" deyip cokuyordu
+  // (olculdu 22 Eyl 2026, M1'de Codex commit atamayinca).
+  "build": ["gate:postbuild", "BITTI"],
   // Plana uymuyorsa yeniden build; plan yanlışsa plana dön.
   "gate:postbuild": ["review", "build", "plan", "BITTI"],
   "review": ["gate:review"],
