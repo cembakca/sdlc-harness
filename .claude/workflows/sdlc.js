@@ -267,10 +267,18 @@ if (specDecision === "pass") {
   )?.exists === true;
 
   if (specOnDisk && specDecision !== "unknown") {
-    const diag = (await command("node", ["gates/diagnose.ts", `${dir}/spec.md`], [0, 1])).stdout;
+    // Kapi artik zayif maddeleri KENDI gerekcesinde adiyla soyluyor (kriter
+    // basina olcume gecince). O yuzden ayri bir teshis cagrisi yapilmiyor:
+    // ~10k token tasarrufu, ve iki ayri olcumun birbirinden ayrisma riski yok.
+    // Gerekce yoksa (eski satir) teshise dusulur.
+    const reason = g("spec").reason ?? "";
+    const named = /acceptance criteria are not verifiable/.test(reason);
+    const detail = named
+      ? reason
+      : (await command("node", ["gates/diagnose.ts", `${dir}/spec.md`], [0, 1])).stdout;
     weakness =
-      `\n\nBU BELGE ZATEN VAR VE KAPI ONU DURDURDU. Kapinin madde madde olcumu:\n` +
-      `${diag}\n` +
+      `\n\nBU BELGE ZATEN VAR VE KAPI ONU DURDURDU. Kapinin olcumu:\n` +
+      `${detail}\n` +
       `BASTAN YAZMA. Yukaridaki puani DUSUK maddeleri yeniden yaz; esigi gecenlere ` +
       `dokunma. Dusuk puanin iki tipik sebebi: (a) tek maddede birden cok tetikleyici ` +
       `ve birden cok iddia var — bolunmeli, her madde tek bir gozlenebilir davranis ` +
