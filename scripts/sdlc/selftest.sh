@@ -919,6 +919,26 @@ else
 fi
 rm -rf "$LK"
 
+# --- Cikis kodu sozlesmesi -----------------------------------------------
+# Cikis kodlari hattin her yerinde anlam tasiyor ama hicbir yerde yazili
+# degildi: her cagiran kendi izin listesini ELLE yaziyordu. Bir kod atlaninca
+# command() ham Error firlatip kosuyu cokertiyor.
+#
+# Olculdu 22 Eyl 2026, M1'in build fazinda: sekiz gorev de bitti, 38 backend +
+# 4 frontend testi gecti — ve hat coktu, cunku izin listesine [0,20] yazilmis,
+# 10 atlanmisti; oysa postbuild kapisi tam o anda insana dusmustu. Ayni
+# taramada uc canli ornek daha cikti (memory.sh 11-16, measure.sh 1,
+# approve.sh 2).
+#
+# Bekci IKI YONLU: akistaki listeler sozlesmeyle, sozlesme de SCRIPT'LERIN
+# KENDI KAYNAGIYLA karsilastirilir. Insan listesi eskiyebilir, kaynak eskimez.
+if EC_OUT="$(env -u SDLC_PROJECT_ROOT node "$HARNESS/scripts/sdlc/exit-contract.mjs" 2>&1)"; then
+  printf '  ✓ %s\n' "çıkış kodu sözleşmesi tutuyor (akış ↔ sözleşme ↔ kaynak)"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "çıkış kodu sözleşmesi bozuk:"; FAIL=$((FAIL+1))
+  printf '%s\n' "$EC_OUT" | head -5 | sed 's/^/    /'
+fi
+
 # --- Sozlesmeye uymayan model ciktisi: DURUS, cokme degil ---------------
 # writeArtifact ham Error firlatiyordu: kosu yigin iziyle oluyor, deftere satir
 # dusmuyor ve modelin NE dondugu hic gorulemiyordu — hatayi teshis edecek tek

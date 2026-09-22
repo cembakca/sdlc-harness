@@ -91,6 +91,9 @@ jobs:
       - name: Repoya sir girmis mi
         run: ${SDLC}scripts/sdlc/secret-scan.sh
 
+      - name: Cikis kodu sozlesmesi tutuyor mu
+        run: node ${SDLC}scripts/sdlc/exit-contract.mjs
+
       - name: Durum makinesi saglam mi (olu faz yok)
         run: node ${SDLC}gates/chain.ts
 

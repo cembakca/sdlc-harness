@@ -126,7 +126,7 @@ function budgetCheck(nextPhase) {
  * kapıda durdu, 17 ms'de, sıfır token harcayarak).
  */
 async function approvalOf(gateName) {
-  const result = await command("scripts/sdlc/approve.sh", ["--check", ticket, gateName], [0, 1]);
+  const result = await command("scripts/sdlc/approve.sh", ["--check", ticket, gateName], [0, 1, 2]);
   return result.code === 0 ? result.stdout.trim() : null;
 }
 /**
@@ -257,7 +257,7 @@ if (roundCount >= MAX_ROUNDS && !a.force) {
 // ajan sistem promptunu + CLAUDE.md'yi (1.224 token) yeniden ödüyordu; on
 // sorgu × ~10k token = koşu başına ~100k token, hiçbiri iş yapmadan.
 const measured = parseJson(
-  (await command("scripts/sdlc/measure.sh", [ticket, "plan-stage"])).stdout
+  (await command("scripts/sdlc/measure.sh", [ticket, "plan-stage"], [0, 1])).stdout
 ) || { gates: {}, approvals: {}, assignment: {} };
 
 // Taze ölçüm varsa O geçerlidir; yoksa toplu ön-ölçüme düşülür.
@@ -496,7 +496,7 @@ phase("gate:postbuild");
 // Build sonrası ölçümler de tek çağrıda: plan uygunluğu + commit disiplini + kademe.
 const buildMeasured =
   parseJson(
-    (await command("scripts/sdlc/measure.sh", [ticket, "build-stage"])).stdout
+    (await command("scripts/sdlc/measure.sh", [ticket, "build-stage"], [0, 1])).stdout
   ) || {};
 const postbuild = JSON.stringify(buildMeasured.postbuild ?? {});
 const rBuild = {
@@ -535,7 +535,7 @@ if (!reviewPatch.trim()) throw new Error("review için kod diff'i yok; boş diff
 // yalnızca delta + geçen turun açık bulguları. İnsan code review'ında da ikinci
 // turda dosya baştan okunmaz.
 const reviewMeta = parseJson(
-  (await command("scripts/sdlc/measure.sh", [ticket, "review-stage"])).stdout
+  (await command("scripts/sdlc/measure.sh", [ticket, "review-stage"], [0, 1])).stdout
 ) || {};
 const rDelivery = {
   tier: reviewMeta.assignment?.measured?.complexity ?? "deep",
