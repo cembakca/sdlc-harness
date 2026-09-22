@@ -372,7 +372,15 @@ if ! git -C "$WT" diff --quiet HEAD 2>/dev/null || [ -n "$(git -C "$WT" status -
   # kopyalar yalnizca Codex okusun diye var; commit edilirse ayni belgenin iki
   # surumu olusuyor ve taban dalla birlesirken cakisiyor (olculdu 21 Eyl 2026:
   # REVIEW.md, TESTS.md ve UAT.md ucu birden cakisti).
-  git -C "$WT" add -A -- . ':!docs/sdlc' >/dev/null 2>&1
+  # HARNESS DA HARIC. Aracin surumu urunun diff'inde isi yok (plan.md'nin
+  # "diff hygiene" bolumu bunu acikca yasakliyor). Onceki denemede yol
+  # .git/info/exclude'a eklenmisti ama o yalnizca IZLENMEYEN dosyalara isler;
+  # sdlc-harness izlenen bir gitlink'tir ve "add -A" onu yine yakaliyordu.
+  # Olculdu 22 Eyl 2026: mimari denetim bunu HIGH olarak acti, diff'ten elle
+  # cikardim, bir sonraki checkpoint geri getirdi.
+  CHECKPOINT_EXCLUDES=(':!docs/sdlc')
+  [ -n "${HARNESS_REL:-}" ] && CHECKPOINT_EXCLUDES+=(":!$HARNESS_REL")
+  git -C "$WT" add -A -- . "${CHECKPOINT_EXCLUDES[@]}" >/dev/null 2>&1
   ROUND="$(git -C "$WT" rev-list --count HEAD 2>/dev/null || echo 0)"
   git -C "$WT" -c user.name="sdlc-harness" -c user.email="sdlc@local" \
     commit -q -m "$TICKET: build round (checkpoint $ROUND)" >/dev/null 2>&1 \

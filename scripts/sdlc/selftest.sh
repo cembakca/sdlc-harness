@@ -1031,6 +1031,24 @@ else
   printf '  ✗ %s\n' "review döngüsü yakınsamıyor —$RS_BAD"; FAIL=$((FAIL+1))
 fi
 
+# --- Aracin surumu urunun diff'ine karismamali --------------------------
+# Iki katmanda birden haric tutulmali:
+#  1. .git/info/exclude → yalnizca IZLENMEYEN dosyalara isler
+#  2. checkpoint commit'inin "add -A" pathspec'i → izlenen gitlink icin SART
+# Ikincisi eksikti: yolu exclude'a eklemistim ama sdlc-harness izlenen bir
+# gitlink; add -A onu yine yakaliyordu. Olculdu 22 Eyl 2026 — mimari denetim
+# bunu HIGH olarak acti, diff'ten elle cikardim, bir sonraki checkpoint geri
+# getirdi.
+CB="$HARNESS/scripts/sdlc/codex-build.sh"
+CB_BAD=""
+grep -q 'CHECKPOINT_EXCLUDES' "$CB" || CB_BAD="$CB_BAD checkpoint-harness-i-haric-tutmuyor"
+grep -q 'EXCLUDES="\$EXCLUDES \$HARNESS_REL"' "$CB" || CB_BAD="$CB_BAD exclude-listesinde-harness-yok"
+if [ -z "${CB_BAD// /}" ]; then
+  printf '  ✓ %s\n' "aracın sürümü ürünün diff'ine giremiyor (iki katman)"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "harness bump ürün diff'ine sızabilir —$CB_BAD"; FAIL=$((FAIL+1))
+fi
+
 # --- Ajan cokerse KANIT kalmali, kosu yigin iziyle olmemeli -------------
 # Olculdu 22 Eyl 2026 (M1): guvenlik denetcisi "Claude exit 1:" diye dustu ve
 # iki nokta ustusteden SONRASI BOSTU — stderr bos geldigi icin elimizde hicbir
