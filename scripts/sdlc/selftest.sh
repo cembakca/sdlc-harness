@@ -1031,6 +1031,28 @@ else
   printf '  ✗ %s\n' "review döngüsü yakınsamıyor —$RS_BAD"; FAIL=$((FAIL+1))
 fi
 
+# --- Durdurucunun onerdigi care UYGULANABILIR olmali ---------------------
+# Bir durdurucu duruyorsa ve "sunu yap" diyorsa, o sey desteklenen arayuzden
+# gercekten yapilabilmeli. Yapilamiyorsa durdurucu degil TUZAKTIR.
+# Kalip 22 Eyl 2026'da hattin kendi sinavinda DORDUNCU kez cikti: kesici
+# "{ force: true }" diyordu, CLI --force'u reddediyordu (kusur #20).
+if RC_OUT="$(env -u SDLC_PROJECT_ROOT node "$HARNESS/scripts/sdlc/remedy-check.mjs" 2>&1)"; then
+  printf '  ✓ %s\n' "durdurucuların önerdiği her çare uygulanabilir"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "durdurucu uygulanamaz çare öneriyor:"; FAIL=$((FAIL+1))
+  printf '%s\n' "$RC_OUT" | head -5 | sed 's/^/    /'
+fi
+# Durdurucuyu atlamak IZSIZ olmamali: --force gerekce ister ve deftere yazilir.
+FC="$HARNESS/scripts/sdlc/orchestrate.mjs"
+FC_BAD=""
+grep -q 'gerekce ister' "$FC" || FC_BAD="$FC_BAD gerekcesiz-force-kabul-ediliyor"
+grep -q '"flow:force"' "$FC" || FC_BAD="$FC_BAD force-deftere-yazilmiyor"
+if [ -z "${FC_BAD// /}" ]; then
+  printf '  ✓ %s\n' "devre kesiciyi atlamak gerekçe ister ve deftere yazılır"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "force sessiz bir bayrak —$FC_BAD"; FAIL=$((FAIL+1))
+fi
+
 # --- Cikis kodu sozlesmesi -----------------------------------------------
 # Cikis kodlari hattin her yerinde anlam tasiyor ama hicbir yerde yazili
 # degildi: her cagiran kendi izin listesini ELLE yaziyordu. Bir kod atlaninca

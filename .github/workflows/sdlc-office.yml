@@ -91,6 +91,9 @@ jobs:
       - name: Repoya sir girmis mi
         run: ${SDLC}scripts/sdlc/secret-scan.sh
 
+      - name: Durduruculerin onerdigi careler uygulanabilir mi
+        run: node ${SDLC}scripts/sdlc/remedy-check.mjs
+
       - name: Cikis kodu sozlesmesi tutuyor mu
         run: node ${SDLC}scripts/sdlc/exit-contract.mjs
 

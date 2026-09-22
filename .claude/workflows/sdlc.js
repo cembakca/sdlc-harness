@@ -254,7 +254,7 @@ if (specBlocks >= MAX_SPEC_ROUNDS && !a.force) {
       `(scripts/sdlc/defer.sh ile bol), ya intent.md belirsiz, ya da kalan maddeler ` +
       `gercekten kod okumadan dogrulanamaz. Son olcum: node gates/flow.ts ${ticket} · ` +
       `madde madde: node gates/diagnose.ts ${dir}/spec.md · ` +
-      `bilerek devam: { "ticket": "${ticket}", "force": true }.`,
+      `bilerek devam: make sdlc-orchestrate TICKET=${ticket} FLAGS='--force="<neden>"'`,
   };
 }
 
@@ -267,7 +267,8 @@ if (roundCount >= MAX_ROUNDS && !a.force) {
       `Bu ticket son kabulden beri ${roundCount} düzeltme turu gördü (sınır ${MAX_ROUNDS}). Hat kendi ` +
       `ısrarıyla token yakmasın diye durdu. Seçenekler: (a) kalan bulguları ` +
       `scripts/sdlc/defer.sh ile kendi ticket'larına taşı, (b) planı daralt, ` +
-      `(c) bilinçli olarak devam et: { "ticket": "${ticket}", "force": true }.`,
+      `(c) bilinçli olarak devam et (gerekçe deftere yazılır): ` +
+      `make sdlc-orchestrate TICKET=${ticket} FLAGS='--force=\"<neden>\"'`,
   };
 }
 // TEK ÇAĞRI, DÖRT ÖLÇÜM. Her ölçüm ayrı bir ajan çağrısıyla yapılıyordu ve her

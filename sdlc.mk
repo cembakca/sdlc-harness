@@ -71,6 +71,9 @@ sdlc-config: ## Yapilandirma gercekten okunabilir mi (alan-alan, modelsiz)
 sdlc-secrets: ## Repoya sir girmis mi (yol + icerik, modelsiz)
 	@$(SDLC)scripts/sdlc/secret-scan.sh
 
+sdlc-remedies: ## Durduruculerin onerdigi careler uygulanabilir mi
+	@node $(SDLC)scripts/sdlc/remedy-check.mjs
+
 sdlc-exits: ## Cikis kodu sozlesmesi tutuyor mu (akis, sozlesme, kaynak)
 	@node $(SDLC)scripts/sdlc/exit-contract.mjs
 
@@ -224,4 +227,4 @@ sdlc-memory-verify: ## Hafiza GERCEKTEN calisiyor mu (yaz -> graf -> geri oku)
 
 # ---------------------------------------------------------------- SDLC son
 
-.PHONY: sdlc-exits sdlc-flow sdlc-next sdlc-cache sdlc-config sdlc-calibrate-plan cognee-agents cognee-ask cognee-bootstrap cognee-cloud cognee-down cognee-full cognee-graph cognee-ingest cognee-local cognee-logs cognee-project cognee-rebuild cognee-reset cognee-skills cognee-up sdlc sdlc-approve sdlc-assign sdlc-calibrate sdlc-chain sdlc-check sdlc-commits sdlc-defer sdlc-diagnose sdlc-doctor sdlc-dryrun sdlc-gate sdlc-github sdlc-hindsight sdlc-history sdlc-init sdlc-land sdlc-memory sdlc-memory-quality sdlc-memory-verify sdlc-merge-check sdlc-new sdlc-orchestrate sdlc-outcome sdlc-postbuild sdlc-ready sdlc-run sdlc-secrets sdlc-selftest sdlc-status sdlc-test 
+.PHONY: sdlc-remedies sdlc-exits sdlc-flow sdlc-next sdlc-cache sdlc-config sdlc-calibrate-plan cognee-agents cognee-ask cognee-bootstrap cognee-cloud cognee-down cognee-full cognee-graph cognee-ingest cognee-local cognee-logs cognee-project cognee-rebuild cognee-reset cognee-skills cognee-up sdlc sdlc-approve sdlc-assign sdlc-calibrate sdlc-chain sdlc-check sdlc-commits sdlc-defer sdlc-diagnose sdlc-doctor sdlc-dryrun sdlc-gate sdlc-github sdlc-hindsight sdlc-history sdlc-init sdlc-land sdlc-memory sdlc-memory-quality sdlc-memory-verify sdlc-merge-check sdlc-new sdlc-orchestrate sdlc-outcome sdlc-postbuild sdlc-ready sdlc-run sdlc-secrets sdlc-selftest sdlc-status sdlc-test 

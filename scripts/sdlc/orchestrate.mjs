@@ -33,9 +33,46 @@ function harnessPath(p) {
 
 const argv = process.argv.slice(2);
 const ticket = argv.shift();
-if (!ticket || argv.some((arg) => !["--spec-only", "--replan"].includes(arg))) {
-  console.error("usage: node scripts/sdlc/orchestrate.mjs <TICKET> [--spec-only] [--replan]");
+
+// DURDURUCUNUN CARESI ULASILABILIR OLMALI.
+//
+// Devre kesici "bilincli olarak devam et: { force: true }" diyordu ama CLI
+// yalnizca --spec-only ve --replan kabul ediyordu; recete desteklenen
+// arayuzden uygulanamiyordu (olculdu 22 Eyl 2026, M1 sinavi, kusur #20).
+// Ayni kalibin dorduncu ornegi: durdurucu hattin israrini kesiyor ama insanin
+// mudahalesini de imkansiz kiliyor.
+//
+// --force bir BAYRAK DEGIL, kayittir: gerekcesiz kabul edilmiyor ve deftere
+// "flow:force" satiri olarak dusuyor. Kapi onaylariyla ayni mantik.
+const FLAGS = ["--spec-only", "--replan"];
+let force = "";
+let maxRounds;
+let maxSpecRounds;
+const rest = [];
+for (const arg of argv) {
+  const [name, ...valueParts] = arg.split("=");
+  const value = valueParts.join("=");
+  if (name === "--force") { force = value.trim(); continue; }
+  if (name === "--max-rounds") { maxRounds = Number(value); continue; }
+  if (name === "--max-spec-rounds") { maxSpecRounds = Number(value); continue; }
+  rest.push(arg);
+}
+if (!ticket || rest.some((arg) => !FLAGS.includes(arg))) {
+  console.error(
+    "usage: node scripts/sdlc/orchestrate.mjs <TICKET> [--spec-only] [--replan]\n" +
+    "                                        [--force=\"<gerekce>\"] [--max-rounds=N] [--max-spec-rounds=N]"
+  );
   process.exit(2);
+}
+if (argv.includes("--force")) {
+  console.error("--force gerekce ister: --force=\"devre kesiciyi neden atliyorsun\"");
+  process.exit(2);
+}
+for (const [flag, value] of [["--max-rounds", maxRounds], ["--max-spec-rounds", maxSpecRounds]]) {
+  if (value !== undefined && (!Number.isInteger(value) || value < 1)) {
+    console.error(`${flag} pozitif tam sayi olmali`);
+    process.exit(2);
+  }
 }
 
 // BILET KILIDI. Ayni bilette iki orkestratör aynı anda koşabiliyordu: defter
@@ -185,12 +222,33 @@ function command(file, args = [], allowed = [0]) {
   });
 }
 
+// Durduruculari atlamak izsiz olmaz: gerekce deftere yazilir, sonra kosulur.
+if (force) {
+  const { record } = await import("../../gates/journal.ts");
+  record({
+    gate: "flow:force",
+    ticket,
+    artifact: "orchestrate",
+    decision: "human",
+    reason: force,
+    measures: { ...(maxRounds !== undefined ? { maxRounds } : {}), ...(maxSpecRounds !== undefined ? { maxSpecRounds } : {}) },
+  });
+  console.error(`devre kesici atlaniyor — gerekce deftere yazildi: ${force}`);
+}
+
 try {
   const result = await orchestrate({
     agent: claude,
     command,
     writeArtifact,
-    args: { ticket, specOnly: argv.includes("--spec-only"), replan: argv.includes("--replan") },
+    args: {
+      ticket,
+      specOnly: argv.includes("--spec-only"),
+      replan: argv.includes("--replan"),
+      force: force ? true : undefined,
+      ...(maxRounds !== undefined ? { maxRounds } : {}),
+      ...(maxSpecRounds !== undefined ? { maxSpecRounds } : {}),
+    },
     budget: { total, spent: () => spent, remaining: () => total === null ? Infinity : total - spent },
     log: (message) => console.error(message),
     onPhase: (phase) => console.error(`→ ${phase}`),
