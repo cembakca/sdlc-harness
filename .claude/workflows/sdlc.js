@@ -213,10 +213,15 @@ const roundCount = parseJson(
     // Kabul = postbuild 'pass' YA DA kayitli bir postbuild onayi.
     "const {read}=await import(process.env.SDLC_HARNESS+'/gates/journal.ts'); " +
     "const rs=read(process.argv[1]); let n=0; " +
+    // TUR = BIR BUILD, bir olcum degil. Ayni build iki kez olculuyor
+    // (codex-build.sh icinde bir, measure.sh build-stage'de bir) ve sayac
+    // postbuild satirlarini saydigi icin tek build'i iki tur goruyordu
+    // (olculdu 22 Eyl 2026: onaydan beri 1 ran:implementer, 2 postbuild).
+    // Yeniden olcmek bedava — onbellek — ve onarim turu degildir.
     "for(const r of rs){ " +
     "  if(r.gate==='postbuild'&&r.decision==='pass') n=0; " +
     "  else if(r.gate==='approve:postbuild') n=0; " +
-    "  else if(r.gate==='postbuild') n++; } " +
+    "  else if(r.gate==='ran:implementer') n++; } " +
     "console.log(JSON.stringify({rounds:n}))",
     ticket])).stdout
 )?.rounds ?? 0;

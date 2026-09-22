@@ -974,6 +974,8 @@ fi
 CB_SRC="$HARNESS/.claude/workflows/sdlc.js"
 CB_BAD=""
 grep -q "decision==='pass') n=0" "$CB_SRC" || CB_BAD="$CB_BAD build-kesici-sifirlamiyor"
+# Tur = BIR BUILD. Olcumu saymak tek build'i iki tur gosterir.
+grep -q "gate==='ran:implementer') n++" "$CB_SRC" || CB_BAD="$CB_BAD build-kesici-olcum-sayiyor"
 grep -q "approve:postbuild') n=0" "$CB_SRC" || CB_BAD="$CB_BAD build-kesici-onayi-saymiyor"
 grep -q "if(r.decision==='pass') n=0" "$CB_SRC" || CB_BAD="$CB_BAD spec-kesici-sifirlamiyor"
 # Toplam sayan eski kalip geri gelmesin.
