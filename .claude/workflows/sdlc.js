@@ -205,7 +205,19 @@ const roundCount = parseJson(
   (await command("node", ["--input-type=module", "-e",
     // Defter HARNESS'in kodu, projenin degil: calisma dizini proje koku oldugu
     // icin goreli './gates/...' projede aranir ve bulunamaz.
-    "const {read}=await import(process.env.SDLC_HARNESS+'/gates/journal.ts'); console.log(JSON.stringify({rounds:read(process.argv[1]).filter(x=>x.gate==='postbuild').length}))",
+    // SON KABULDEN BERI kac tur. Toplam sayilirsa kesici bir kez tetiklendikten
+    // sonra is DUZELSE BILE bir daha asla acilmaz ve tek cikis 'force' olur —
+    // yani kesici, duzeltmeyi de engeller. Ayni hata spec kesicisinde
+    // duzeltilmisti, burada kalmisti (olculdu 22 Eyl 2026: M1'de postbuild
+    // kapisi insan onayiyla gecilmisti, kesici yine de 6 tur sayip durdurdu).
+    // Kabul = postbuild 'pass' YA DA kayitli bir postbuild onayi.
+    "const {read}=await import(process.env.SDLC_HARNESS+'/gates/journal.ts'); " +
+    "const rs=read(process.argv[1]); let n=0; " +
+    "for(const r of rs){ " +
+    "  if(r.gate==='postbuild'&&r.decision==='pass') n=0; " +
+    "  else if(r.gate==='approve:postbuild') n=0; " +
+    "  else if(r.gate==='postbuild') n++; } " +
+    "console.log(JSON.stringify({rounds:n}))",
     ticket])).stdout
 )?.rounds ?? 0;
 
@@ -247,7 +259,7 @@ if (roundCount >= MAX_ROUNDS && !a.force) {
     stoppedAt: "devre-kesici",
     rounds: roundCount,
     next:
-      `Bu ticket ${roundCount} düzeltme turu gördü (sınır ${MAX_ROUNDS}). Hat kendi ` +
+      `Bu ticket son kabulden beri ${roundCount} düzeltme turu gördü (sınır ${MAX_ROUNDS}). Hat kendi ` +
       `ısrarıyla token yakmasın diye durdu. Seçenekler: (a) kalan bulguları ` +
       `scripts/sdlc/defer.sh ile kendi ticket'larına taşı, (b) planı daralt, ` +
       `(c) bilinçli olarak devam et: { "ticket": "${ticket}", "force": true }.`,

@@ -944,6 +944,26 @@ else
   printf '  ✗ %s\n' "postbuild dosya deseni bozuk — $PB_OUT"; FAIL=$((FAIL+1))
 fi
 
+# --- Devre kesiciler KABULDEN sonra sifirlanmali ------------------------
+# "Durdurucu hattin israrini keser, insanin mudahalesini degil." Toplam sayan
+# bir kesici, is duzelse bile bir daha acilmaz ve tek cikis 'force' olur.
+# Ayni hata IKI KEZ yapildi: once spec kesicisinde, sonra build kesicisinde
+# (olculdu 22 Eyl 2026 — M1'de postbuild kapisi insan onayiyla gecilmisti,
+# kesici yine de 6 tur sayip durdurdu). Bekci artik ikisini de kaynaktan
+# denetliyor: sayac bir KABUL satirinda sifirlanmiyorsa kusurludur.
+CB_SRC="$HARNESS/.claude/workflows/sdlc.js"
+CB_BAD=""
+grep -q "decision==='pass') n=0" "$CB_SRC" || CB_BAD="$CB_BAD build-kesici-sifirlamiyor"
+grep -q "approve:postbuild') n=0" "$CB_SRC" || CB_BAD="$CB_BAD build-kesici-onayi-saymiyor"
+grep -q "if(r.decision==='pass') n=0" "$CB_SRC" || CB_BAD="$CB_BAD spec-kesici-sifirlamiyor"
+# Toplam sayan eski kalip geri gelmesin.
+grep -q "filter(x=>x.gate==='postbuild').length" "$CB_SRC" && CB_BAD="$CB_BAD build-kesici-toplam-sayiyor"
+if [ -z "${CB_BAD// /}" ]; then
+  printf '  ✓ %s\n' "devre kesiciler kabulden sonra sıfırlanıyor (düzeltmeyi engellemiyor)"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "devre kesici düzeltmeyi engelliyor —$CB_BAD"; FAIL=$((FAIL+1))
+fi
+
 # --- Cikis kodu sozlesmesi -----------------------------------------------
 # Cikis kodlari hattin her yerinde anlam tasiyor ama hicbir yerde yazili
 # degildi: her cagiran kendi izin listesini ELLE yaziyordu. Bir kod atlaninca
