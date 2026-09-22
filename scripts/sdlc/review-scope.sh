@@ -35,7 +35,57 @@ fi
 # beri olan her sey, arti commit edilmemis kalan.
 FULL_DIFF="git -C $WT diff $BASE...HEAD   (ayrica commit edilmemis icin: git -C $WT diff)"
 
-[ -d "$WT" ] || { echo "FULL"; echo "worktree yok — tam diff okunacak"; exit 0; }
+# ACIK BULGULARI GERCEKTEN CIKAR — VE HER DALDA.
+#
+# Iki ayri hata vardi:
+#  1. Bulgular Markdown TABLO satiri olarak araniyordu ("| ... | open |"), ama
+#     denetciler ```findings-json blogu yaziyor; grep her zaman BOS donuyordu.
+#  2. Cikarim dosyanin SONUNDAYDI ve ustunde uc ayri "exit 0" dali vardi (ilk
+#     denetim, yeni commit yok, buyuk delta). Yani bulgular tam da ise
+#     yarayacaklari durumlarda hic iletilmiyordu.
+#
+# Sonuc: review'ci gecen turun bulgularini hic gormuyor, kapandi mi
+# dogrulayamiyor ve her tur sifirdan YENI bulgular aciyordu — dongu
+# yakinsamiyordu. Olculdu 22 Eyl 2026: denetci raporunun ilk cumlesi
+# "iletilen open bulgular blogu bos geldi" diye yaziyordu.
+#
+# Acik bulgular KAPSAMLA ilgili degil, SUREKLILIKLE ilgili: hangi diff
+# okunursa okunsun iletilmeleri gerekir.
+emit_open_findings() {
+  [ -f "$DIR/REVIEW.md" ] || return 0
+  echo ""
+  echo "AYRICA: gecen turun acik bulgulari kapandi mi, tek tek dogrula."
+  echo "Kapanmayanlari 'open' olarak KORU; kapananlari 'fixed' isaretle ve nasil"
+  echo "kapatildigini bir satirda yaz. Bulguyu kapandi saymak icin kodu gormus"
+  echo "olman sart — commit mesajina guvenme."
+  OPEN="$(node --input-type=module -e '
+    import { readFileSync } from "node:fs";
+    const text = readFileSync(process.argv[1], "utf8");
+    const out = [];
+    for (const m of text.matchAll(/```findings-json\s*([\s\S]*?)```/g)) {
+      try {
+        for (const f of JSON.parse(m[1])) {
+          if (String(f.status ?? "open").toLowerCase() !== "open") continue;
+          out.push(`- [${String(f.severity ?? "?").toUpperCase()}] ${f.file ?? "?"} — ${f.title ?? ""}`);
+        }
+      } catch { /* bozuk blok: digerleri okunsun */ }
+    }
+    if (!out.length) {
+      for (const line of text.split("\n")) {
+        if (/^\|/.test(line) && /\|\s*open\s*\|/i.test(line)) out.push(line.trim());
+      }
+    }
+    console.log([...new Set(out)].slice(0, 30).join("\n"));
+  ' "$DIR/REVIEW.md" 2>/dev/null)"
+  if [ -n "$OPEN" ]; then
+    echo "--- onceki bulgular (open olanlar) ---"
+    printf '%s\n' "$OPEN"
+  else
+    echo "--- onceki turdan acik bulgu yok ---"
+  fi
+}
+
+[ -d "$WT" ] || { echo "FULL"; echo "worktree yok — tam diff okunacak"; emit_open_findings; exit 0; }
 
 HEAD_NOW="$(git -C "$WT" rev-parse HEAD 2>/dev/null | cut -c1-12)"
 LAST="$(node --input-type=module -e '
@@ -49,6 +99,7 @@ if [ -z "$LAST" ] || [ "$LAST" = "$HEAD_NOW" ]; then
   echo "FULL"
   echo "Bu ilk denetim (ya da onceki denetimden beri commit yok)."
   echo "Oku: $FULL_DIFF"
+  emit_open_findings
   exit 0
 fi
 
@@ -73,6 +124,7 @@ if [ "${DELTA_LINES:-0}" -gt $(( ${TOTAL_LINES:-1} / 2 )) ]; then
   echo "FULL"
   echo "Delta ($DELTA_LINES satir) toplamin yarisindan buyuk — tam okumak daha dogru."
   echo "Oku: $FULL_DIFF"
+  emit_open_findings
   exit 0
 fi
 
@@ -80,12 +132,4 @@ echo "DELTA"
 echo "Onceki denetim: $LAST · simdi: $HEAD_NOW · yeni satir: ${DELTA_LINES:-?}"
 echo "Oku: git -C $WT diff $LAST..HEAD -- $TICKET_FILES"
 echo ""
-echo "AYRICA: gecen turun acik bulgulari kapandi mi, tek tek dogrula."
-echo "Kapanmayanlari 'open' olarak KORU; kapananlari 'fixed' isaretle ve nasil"
-echo "kapatildigini bir satirda yaz. Bulguyu kapandi saymak icin kodu gormus olman"
-echo "sart — commit mesajina guvenme."
-echo ""
-if [ -f "$DIR/REVIEW.md" ]; then
-  echo "--- onceki bulgular (open olanlar) ---"
-  grep -E '^\|' "$DIR/REVIEW.md" | grep -iE '\| *open *\|' | head -20
-fi
+emit_open_findings

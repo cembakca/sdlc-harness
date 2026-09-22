@@ -986,6 +986,51 @@ else
   printf '  ✗ %s\n' "devre kesici düzeltmeyi engelliyor —$CB_BAD"; FAIL=$((FAIL+1))
 fi
 
+# --- Acik bulgular review'ciya HER DALDA iletilmeli ---------------------
+# Iki ayri hata dongunun yakinsamasini engelliyordu:
+#  1. Bulgular Markdown TABLO satiri olarak araniyordu ama denetciler
+#     ```findings-json blogu yaziyor; grep her zaman bos donuyordu.
+#  2. Cikarim dosyanin sonundaydi ve ustunde uc ayri "exit 0" dali vardi.
+# Sonuc: review'ci gecen turun bulgularini hic gormuyor, kapandi mi
+# dogrulayamiyor ve her tur sifirdan YENI bulgular aciyordu. Olculdu
+# 22 Eyl 2026: denetci raporunun ilk cumlesi "iletilen open bulgular blogu
+# bos geldi" diye yaziyordu — ve o sirada okunmayan listede IKI HIGH vardi.
+RS="$HARNESS/scripts/sdlc/review-scope.sh"
+RS_BAD=""
+grep -q "findings-json" "$RS" || RS_BAD="$RS_BAD json-bulgulari-okumuyor"
+# Her "exit 0" dalindan once bulgular iletilmeli.
+RS_EXITS="$(grep -c 'exit 0' "$RS")"
+RS_EMITS="$(grep -c 'emit_open_findings' "$RS")"
+[ "${RS_EMITS:-0}" -ge "${RS_EXITS:-0}" ] || RS_BAD="$RS_BAD bazi-dallarda-iletilmiyor($RS_EMITS/$RS_EXITS)"
+# Cikarim gercekten calisiyor mu: ornek bir findings-json blogundan open olani al.
+RS_TMP="$(mktemp -d)"; mkdir -p "$RS_TMP/docs/sdlc/RS-1"
+cat > "$RS_TMP/docs/sdlc/RS-1/REVIEW.md" <<'MD'
+# Review
+```findings-json
+[{"severity":"high","file":"a.py:1","status":"open","title":"acik olan"},
+ {"severity":"low","file":"b.py:2","status":"fixed","title":"kapanmis olan"}]
+```
+MD
+RS_OUT="$(env -u SDLC_PROJECT_ROOT node --input-type=module -e '
+import { readFileSync } from "node:fs";
+const text = readFileSync(process.argv[1], "utf8");
+const out = [];
+for (const m of text.matchAll(/```findings-json\s*([\s\S]*?)```/g)) {
+  for (const f of JSON.parse(m[1])) {
+    if (String(f.status ?? "open").toLowerCase() !== "open") continue;
+    out.push(String(f.title ?? ""));
+  }
+}
+console.log(out.join("|"));
+' "$RS_TMP/docs/sdlc/RS-1/REVIEW.md" 2>&1)"
+[ "$RS_OUT" = "acik olan" ] || RS_BAD="$RS_BAD cikarim-yanlis($RS_OUT)"
+rm -rf "$RS_TMP"
+if [ -z "${RS_BAD// /}" ]; then
+  printf '  ✓ %s\n' "açık bulgular review'ciya her dalda iletiliyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "review döngüsü yakınsamıyor —$RS_BAD"; FAIL=$((FAIL+1))
+fi
+
 # --- Cikis kodu sozlesmesi -----------------------------------------------
 # Cikis kodlari hattin her yerinde anlam tasiyor ama hicbir yerde yazili
 # degildi: her cagiran kendi izin listesini ELLE yaziyordu. Bir kod atlaninca
