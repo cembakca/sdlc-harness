@@ -3,7 +3,7 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { orchestrate } from "../../sdlc/orchestrator.mjs";
 import { projectRoot } from "../../gates/root.ts";
 
@@ -37,6 +37,41 @@ if (!ticket || argv.some((arg) => !["--spec-only", "--replan"].includes(arg))) {
   console.error("usage: node scripts/sdlc/orchestrate.mjs <TICKET> [--spec-only] [--replan]");
   process.exit(2);
 }
+
+// BILET KILIDI. Ayni bilette iki orkestratör aynı anda koşabiliyordu: defter
+// satirlari ic ice geciyor ve biri digerinin ureteceği belgeyi üstüne yaziyor.
+// Olculdu 22 Eyl 2026 — M1'de iki kosu ust uste bindi ve elle duzeltilmis bir
+// spec.md, digerinin yeniden urettigi surumle silindi.
+//
+// Kilit BAYAT KALMAZ: PID yaziliyor ve surec olmusse kilit geri aliniyor.
+// Aksi halde bir cokme, bileti kalici olarak kilitlerdi.
+const lockPath = resolve(root, "docs/sdlc", ticket, ".orchestrate.lock");
+function claimLock() {
+  mkdirSync(dirname(lockPath), { recursive: true });
+  try {
+    const held = JSON.parse(readFileSync(lockPath, "utf8"));
+    let alive = false;
+    try { process.kill(held.pid, 0); alive = true; } catch { alive = false; }
+    if (alive && held.pid !== process.pid) {
+      console.error(
+        `${ticket} zaten koşuyor (pid ${held.pid}, başlangıç ${held.at}).\n` +
+        `  İki koşu aynı bilette birbirinin belgesini üstüne yazar.\n` +
+        `  Bitmesini bekleyin ya da o süreci durdurun: kill ${held.pid}`
+      );
+      process.exit(20);
+    }
+    console.error(`bayat kilit geri alındı (pid ${held.pid} artık yok)`);
+  } catch (err) {
+    if (err?.code !== "ENOENT" && err?.name !== "SyntaxError") { /* okunamadi: yenisini yaz */ }
+  }
+  writeFileSync(lockPath, JSON.stringify({ pid: process.pid, at: new Date().toISOString(), ticket }), "utf8");
+  const release = () => { try { rmSync(lockPath, { force: true }); } catch { /* zaten yok */ } };
+  process.on("exit", release);
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    process.on(sig, () => { release(); process.exit(20); });
+  }
+}
+claimLock();
 
 let spent = 0;
 const total = process.env.SDLC_TOKEN_BUDGET == null ? null : Number(process.env.SDLC_TOKEN_BUDGET);

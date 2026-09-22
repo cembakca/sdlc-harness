@@ -5,3 +5,6 @@ ops/cognee/.ingest-state.json
 # Kapi olcum onbellegi: yerel, paylasilmaz (CI zaten modelsiz kosar).
 .sdlc-cache/
 node_modules/
+
+# Orkestratör kilidi (surec bazli, commit edilmez).
+docs/sdlc/*/.orchestrate.lock

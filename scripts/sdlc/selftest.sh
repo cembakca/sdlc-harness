@@ -897,6 +897,28 @@ else
   printf '  ✗ %s\n' "önbellek anahtarı bozuk — $CK $CK_WIRED"; FAIL=$((FAIL+1))
 fi
 
+# --- Ayni bilette iki kosu ust uste binmemeli ---------------------------
+# Olculdu 22 Eyl 2026: M1'de iki orkestratör ayni anda kostu, defter satirlari
+# ic ice gecti ve elle duzeltilmis bir spec.md digerinin yeniden urettigi
+# surumle silindi. Kilit BAYAT KALMAMALI: cokme bileti kalici kilitlemesin.
+LK="$(mktemp -d)/proje"; mkdir -p "$LK/docs/sdlc/LK-1" "$LK/sdlc"
+printf '{"schemaVersion":1,"name":"p","stacks":[]}' > "$LK/sdlc/project.json"
+LK_SRC="$HARNESS/scripts/sdlc/orchestrate.mjs"
+LK_BAD=""
+grep -q "claimLock" "$LK_SRC" || LK_BAD="kilit yok"
+grep -q "process.kill(held.pid, 0)" "$LK_SRC" || LK_BAD="$LK_BAD bayat kilit geri alinmiyor"
+grep -q 'process.on("exit", release)' "$LK_SRC" || LK_BAD="$LK_BAD kilit birakilmiyor"
+# Canli kilit varken ikinci kosu DURMALI: kilidi bu kabuk surecine yazip deneriz.
+printf '{"pid":%s,"at":"now","ticket":"LK-1"}' "$$" > "$LK/docs/sdlc/LK-1/.orchestrate.lock"
+env -u SDLC_PROJECT_ROOT SDLC_PROJECT_ROOT="$LK" node "$LK_SRC" LK-1 >/dev/null 2>&1
+[ "$?" = "20" ] || LK_BAD="$LK_BAD canli kilit ikinci kosuyu durdurmuyor"
+if [ -z "${LK_BAD// /}" ]; then
+  printf '  ✓ %s\n' "aynı bilette ikinci koşu kilide takılıyor, bayat kilit geri alınıyor"; PASS=$((PASS+1))
+else
+  printf '  ✗ %s\n' "bilet kilidi bozuk —$LK_BAD"; FAIL=$((FAIL+1))
+fi
+rm -rf "$LK"
+
 # --- Sozlesmeye uymayan model ciktisi: DURUS, cokme degil ---------------
 # writeArtifact ham Error firlatiyordu: kosu yigin iziyle oluyor, deftere satir
 # dusmuyor ve modelin NE dondugu hic gorulemiyordu — hatayi teshis edecek tek
